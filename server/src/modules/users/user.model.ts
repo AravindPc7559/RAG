@@ -1,0 +1,71 @@
+import mongoose, {
+  type HydratedDocument,
+  type Model,
+  Schema,
+} from "mongoose";
+
+import {
+  userRoles,
+  userStatuses,
+  type UserRole,
+  type UserStatus,
+} from "./user.types.js";
+
+export interface UserEntity {
+  name: string;
+  email: string;
+  passwordHash: string;
+  role: UserRole;
+  status: UserStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type UserDocument = HydratedDocument<UserEntity>;
+
+const userSchema = new Schema<UserEntity>(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 120,
+    },
+    email: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true,
+      unique: true,
+      index: true,
+    },
+    passwordHash: {
+      type: String,
+      required: true,
+      select: false,
+    },
+    role: {
+      type: String,
+      enum: userRoles,
+      default: "member",
+      required: true,
+      index: true,
+    },
+    status: {
+      type: String,
+      enum: userStatuses,
+      default: "active",
+      required: true,
+      index: true,
+    },
+  },
+  {
+    timestamps: true,
+    versionKey: false,
+  },
+);
+
+userSchema.index({ name: 1, email: 1 });
+
+export const UserModel: Model<UserEntity> =
+  mongoose.models.User ?? mongoose.model<UserEntity>("User", userSchema);
