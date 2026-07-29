@@ -42,12 +42,12 @@ export function AppRouter() {
           <Route path={paths.register} element={<RegisterPage />} />
         </Route>
 
-        <Route element={<ProtectedRoute />}>
-          <Route element={<AppShell />}>
+        {/* <Route element={<ProtectedRoute />}>
+          <Route element={<AppShell />}> */}
             <Route index element={<DashboardPage />} />
             <Route path={paths.users} element={<UsersPage />} />
-          </Route>
-        </Route>
+          {/* </Route>
+        </Route> */}
 
         <Route path="/dashboard" element={<Navigate to={paths.dashboard} replace />} />
         <Route path="*" element={<NotFoundPage />} />
