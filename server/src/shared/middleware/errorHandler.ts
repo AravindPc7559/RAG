@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler } from "express";
 import mongoose from "mongoose";
+import multer from "multer";
 
 import { env } from "../../config/env.js";
 import { AppError } from "../errors/AppError.js";
@@ -34,6 +35,12 @@ export const errorHandler: ErrorRequestHandler = (
     return response
       .status(400)
       .json(createResponse("INVALID_IDENTIFIER", "The supplied identifier is invalid."));
+  }
+
+  if (error instanceof multer.MulterError) {
+    return response
+      .status(400)
+      .json(createResponse("INVALID_UPLOAD", error.message));
   }
 
   if (

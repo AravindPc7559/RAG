@@ -7,6 +7,14 @@ const booleanFromString = z
   .default("false")
   .transform((value) => value === "true");
 
+const optionalString = z.preprocess(
+  (value) =>
+    typeof value === "string" && value.trim() === ""
+      ? undefined
+      : value,
+  z.string().trim().min(1).optional(),
+);
+
 const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
@@ -32,6 +40,22 @@ const envSchema = z.object({
     .trim()
     .min(1)
     .default("mongodb://127.0.0.1:27017/rag"),
+  OPENAI_API_KEY: optionalString,
+  OPENAI_EMBEDDING_MODEL: z
+    .string()
+    .trim()
+    .min(1)
+    .default("text-embedding-3-small"),
+  VECTOR_SEARCH_MODE: z.enum(["local", "mongodb"]).default("local"),
+  VECTOR_SEARCH_INDEX: z.string().trim().min(1).default("vector_index"),
+  VECTOR_SEARCH_LIMIT: z.coerce.number().int().positive().max(100).default(5),
+  VECTOR_SEARCH_MIN_SCORE: z.coerce.number().min(-1).max(1).default(0.2),
+  DOCUMENT_MAX_FILE_SIZE_MB: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(50)
+    .default(10),
   JWT_SECRET: z
     .string()
     .min(32)

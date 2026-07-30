@@ -19,12 +19,16 @@ nvm use 22.22.3
 ## Start locally
 
 ```powershell
+nvm use 22.22.3
 Copy-Item .env.example .env
 npm ci --registry=https://registry.npmjs.org
 npm run dev
 ```
 
 The API starts at `http://127.0.0.1:4000/api/v1`.
+The default MongoDB connection is
+`mongodb://127.0.0.1:27017/rag`, which works with a normal local MongoDB
+installation and MongoDB Compass.
 
 The public registry flag is required in this workspace because its configured
 corporate feed does not currently mirror all project dependencies.
@@ -44,6 +48,53 @@ npm run seed:admin
 Set `ADMIN_NAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` before running
 `seed:admin`. If the email already exists, the account is promoted to an active
 administrator without changing its password.
+
+## Document RAG configuration
+
+Set `OPENAI_API_KEY` in `.env` before uploading a document. The server uses
+`text-embedding-3-small` by default and stores one embedding per text chunk.
+Supported uploads are PDF, TXT, Markdown, and CSV.
+
+For a normal MongoDB installation on port `27017`, keep:
+
+```dotenv
+MONGODB_URI=mongodb://127.0.0.1:27017/rag
+VECTOR_SEARCH_MODE=local
+```
+
+Local mode loads only the authenticated user's selected document chunks from
+MongoDB and calculates cosine similarity in the server. This is suitable for
+learning and small local datasets, but it does not scale to a large collection.
+
+To use MongoDB's native `$vectorSearch`, connect to Atlas, Atlas Local, or a
+compatible self-managed Vector Search deployment, create an index named
+`vector_index`, and set `VECTOR_SEARCH_MODE=mongodb`. For
+`text-embedding-3-small`, use this index definition:
+
+```json
+{
+  "fields": [
+    {
+      "type": "vector",
+      "path": "embedding",
+      "numDimensions": 1536,
+      "similarity": "cosine"
+    },
+    {
+      "type": "filter",
+      "path": "userId"
+    },
+    {
+      "type": "filter",
+      "path": "documentId"
+    }
+  ]
+}
+```
+
+Compass can create and inspect this index when it is connected to a supported
+deployment. Compass itself does not add Vector Search support to a standard
+MongoDB server.
 
 ## Architecture
 
@@ -72,6 +123,13 @@ src/
 │   │   ├── user.routes.ts
 │   │   ├── user.schema.ts
 │   │   └── user.module.ts
+│   ├── document/
+│   │   ├── document.controller.ts
+│   │   ├── document.service.ts
+│   │   ├── document.repository.ts
+│   │   ├── document.model.ts
+│   │   ├── document.routes.ts
+│   │   └── document.modules.ts
 │   └── health/
 ├── routes/
 └── shared/
@@ -138,6 +196,9 @@ POST /api/v1/auth/register
 POST /api/v1/auth/login
 GET  /api/v1/auth/me
 POST /api/v1/auth/logout
+
+POST /api/v1/document/upload_document
+POST /api/v1/document/ask_document
 
 GET    /api/v1/users
 GET    /api/v1/users/:id

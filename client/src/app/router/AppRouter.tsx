@@ -2,14 +2,17 @@ import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { paths } from "@/app/router/paths";
-import { AppShell } from "@/shared/components/AppShell";
 import { FullPageLoader } from "@/shared/components/FullPageLoader";
-import { ProtectedRoute } from "@/shared/routes/ProtectedRoute";
 import { PublicOnlyRoute } from "@/shared/routes/PublicOnlyRoute";
 
 const DashboardPage = lazy(() =>
   import("@/features/dashboard").then((module) => ({
     default: module.DashboardPage,
+  })),
+);
+const DocumentChat = lazy(() =>
+  import("@/features/chat").then((module) => ({
+    default: module.DocumentChat,
   })),
 );
 const LoginPage = lazy(() =>
@@ -45,6 +48,7 @@ export function AppRouter() {
         {/* <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}> */}
             <Route index element={<DashboardPage />} />
+            <Route path={paths.chat} element={<DocumentChat />} />
             <Route path={paths.users} element={<UsersPage />} />
           {/* </Route>
         </Route> */}

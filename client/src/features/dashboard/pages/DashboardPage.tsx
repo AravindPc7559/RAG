@@ -1,12 +1,17 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
   type ChangeEvent,
   type DragEvent,
 } from "react";
+import { useNavigate } from "react-router-dom";
 
-const EXTRACTION_PREVIEW_DURATION_MS = 3000;
+import { paths } from "@/app/router/paths";
+import { toApiErrorPayload } from "@/services/apiErrors";
+
+import { dashboardAPI } from "@/features/dashboard/api/dashboardApi";
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024) {
@@ -21,11 +26,13 @@ function formatFileSize(bytes: number) {
 }
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isReady, setIsReady] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isExtracting) {
@@ -35,13 +42,7 @@ export function DashboardPage() {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    const extractionPreview = window.setTimeout(() => {
-      setIsExtracting(false);
-      setIsReady(true);
-    }, EXTRACTION_PREVIEW_DURATION_MS);
-
     return () => {
-      window.clearTimeout(extractionPreview);
       document.body.style.overflow = previousOverflow;
     };
   }, [isExtracting]);
@@ -53,7 +54,32 @@ export function DashboardPage() {
 
     setUploadedFile(file);
     setIsReady(false);
+    setUploadError(null);
   };
+
+  const handleAskButtonClick = useCallback(async () => {
+    if (!uploadedFile) {
+      return;
+    }
+
+    try {
+      setIsExtracting(true);
+      setUploadError(null);
+
+      const response = await dashboardAPI.uploadDocument(uploadedFile);
+      setIsReady(true);
+      navigate(paths.chat, {
+        state: {
+          documentName: response.document.fileName,
+          documentId: response.document.documentId,
+        },
+      });
+    } catch (error) {
+      setUploadError(toApiErrorPayload(error).message);
+    } finally {
+      setIsExtracting(false);
+    }
+  }, [navigate, uploadedFile]);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     selectDocument(event.target.files?.[0]);
@@ -68,6 +94,7 @@ export function DashboardPage() {
   const removeDocument = () => {
     setUploadedFile(null);
     setIsReady(false);
+    setUploadError(null);
 
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -118,11 +145,11 @@ export function DashboardPage() {
                 ref={inputRef}
                 className="document-upload__input"
                 type="file"
-                accept=".pdf,.doc,.docx,.txt"
+                accept=".pdf,.txt,.md,.csv"
                 onChange={handleFileChange}
               />
               <span className="document-upload__hint">
-                PDF, DOC, DOCX or TXT
+                PDF, TXT, MD or CSV
               </span>
             </>
           ) : (
@@ -164,7 +191,8 @@ export function DashboardPage() {
             <button
               type="button"
               className="ask-button"
-              onClick={() => setIsExtracting(true)}
+              onClick={handleAskButtonClick}
+              disabled={isExtracting}
             >
               <span>ASK</span>
               <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -172,6 +200,11 @@ export function DashboardPage() {
               </svg>
             </button>
             <p>We&apos;ll extract and organize the document before you begin.</p>
+            {uploadError && (
+              <p className="document-action__error" role="alert">
+                {uploadError}
+              </p>
+            )}
           </div>
         )}
       </section>
