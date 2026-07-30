@@ -10,9 +10,11 @@ import type {
   DocumentRepository,
 } from "./document.repository.js";
 import type { UploadedDocumentSummary } from "./document.types.js";
+import { UserModel } from "../users/user.model.js";
+import mongoose from "mongoose";
 
 export class DocumentService {
-  constructor(private readonly documentRepository: DocumentRepository) {}
+  constructor(private readonly documentRepository: DocumentRepository) { }
 
   public async uploadDocument(
     document: Express.Multer.File,
@@ -25,6 +27,21 @@ export class DocumentService {
 
     const documentId = randomUUID();
     const storedDocument = await uploadDocumentToCloudinary(document, userId);
+    if (storedDocument) {
+      if (storedDocument) {
+        await UserModel.updateOne(
+          { _id: new mongoose.Types.ObjectId(userId) },
+          {
+            $push: {
+              documentUrls: {
+                publicId: storedDocument.publicId,
+                url: storedDocument.secureUrl,
+              },
+            },
+          },
+        );
+      }
+    }
     const chunks: DocumentChunkInput[] = [];
 
     try {

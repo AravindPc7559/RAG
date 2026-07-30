@@ -7,10 +7,10 @@ export interface AskDocumentResponse {
 }
 
 export const chatAPI = {
-  async askDocument(question: string, documentId?: string) {
+  async askDocument(question: string, documentId: string) {
     const response = await baseService.post<AskDocumentResponse>(
-      "/document/ask_document",
-      { question, documentId },
+      `/document/ask_document/${encodeURIComponent(documentId)}`,
+      { question },
       { timeout: env.documentApiTimeoutMs },
     );
 

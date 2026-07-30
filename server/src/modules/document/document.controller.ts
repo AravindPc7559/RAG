@@ -29,23 +29,25 @@ export class DocumentController {
   };
 
   public askDocument: RequestHandler = async (request, response) => {
-    const { question, documentId } = request.body as {
+    const { question } = request.body as {
       question?: string;
-      documentId?: string;
     };
+    const documentIdParam = request.params.documentId;
+    const documentId =
+      typeof documentIdParam === "string" ? documentIdParam.trim() : "";
     const userId = request.user?.id;
 
-    if (!question?.trim() || !userId) {
+    if (!question?.trim() || !documentId || !userId) {
       response
         .status(400)
-        .json({ message: "No question or user id provided" });
+        .json({ message: "No question, document id, or user id provided" });
       return;
     }
 
     const answer = await this.documentService.askDocument(
       question.trim(),
       userId,
-      documentId?.trim() || undefined,
+      documentId,
     );
 
     response.status(200).json({

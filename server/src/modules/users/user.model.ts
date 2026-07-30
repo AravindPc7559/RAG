@@ -19,6 +19,10 @@ export interface UserEntity {
   status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
+  documentUrls: {
+    publicId: string,
+    url: string
+  }[];
 }
 
 export type UserDocument = HydratedDocument<UserEntity>;
@@ -58,6 +62,9 @@ const userSchema = new Schema<UserEntity>(
       required: true,
       index: true,
     },
+    documentUrls:{
+      type: [],
+    }
   },
   {
     timestamps: true,

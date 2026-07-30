@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { paths } from "@/app/router/paths";
+import { createChatPath } from "@/app/router/paths";
 import { toApiErrorPayload } from "@/services/apiErrors";
 
 import { dashboardAPI } from "@/features/dashboard/api/dashboardApi";
@@ -68,10 +68,9 @@ export function DashboardPage() {
 
       const response = await dashboardAPI.uploadDocument(uploadedFile);
       setIsReady(true);
-      navigate(paths.chat, {
+      navigate(createChatPath(response.document.documentId), {
         state: {
           documentName: response.document.fileName,
-          documentId: response.document.documentId,
         },
       });
     } catch (error) {

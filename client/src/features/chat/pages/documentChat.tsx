@@ -3,7 +3,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 
 import { paths } from "@/app/router/paths";
 import { chatAPI } from "@/features/chat/api/chatApi";
@@ -11,7 +11,6 @@ import { toApiErrorPayload } from "@/services/apiErrors";
 
 interface ChatLocationState {
   documentName?: string;
-  documentId?: string;
 }
 
 interface ChatExchange {
@@ -23,9 +22,9 @@ interface ChatExchange {
 
 export default function DocumentChat() {
   const location = useLocation();
+  const { documentId } = useParams<{ documentId: string }>();
   const chatState = location.state as ChatLocationState | null;
   const documentName = chatState?.documentName ?? "Uploaded document";
-  const documentId = chatState?.documentId;
   const [question, setQuestion] = useState("");
   const [exchanges, setExchanges] = useState<ChatExchange[]>([]);
   const [isAnswering, setIsAnswering] = useState(false);
@@ -34,7 +33,7 @@ export default function DocumentChat() {
     event.preventDefault();
 
     const submittedQuestion = question.trim();
-    if (!submittedQuestion || isAnswering) {
+    if (!submittedQuestion || !documentId || isAnswering) {
       return;
     }
 
@@ -186,7 +185,7 @@ export default function DocumentChat() {
           <button
             type="submit"
             aria-label="Send question"
-            disabled={!question.trim() || isAnswering}
+            disabled={!question.trim() || !documentId || isAnswering}
           >
             <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path d="m5 12 14-7-4 14-3-6-7-1Z" />

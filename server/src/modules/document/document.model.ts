@@ -63,6 +63,11 @@ documentSchema.index(
   },
 );
 
+documentSchema.index(
+  { userId: 1, text: "text" },
+  { name: "document_keyword_search" },
+);
+
 const existingDocumentModel = mongoose.models.Document as
   | mongoose.Model<IDocument>
   | undefined;
