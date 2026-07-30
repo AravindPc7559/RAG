@@ -17,4 +17,8 @@ export const env = Object.freeze({
     import.meta.env.VITE_API_TIMEOUT_MS,
     10_000,
   ),
+  documentApiTimeoutMs: readPositiveNumber(
+    import.meta.env.VITE_DOCUMENT_API_TIMEOUT_MS,
+    120_000,
+  ),
 });

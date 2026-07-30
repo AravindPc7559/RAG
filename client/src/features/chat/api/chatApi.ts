@@ -1,4 +1,5 @@
 import { baseService } from "@/services/baseService";
+import { env } from "@/config/env";
 
 export interface AskDocumentResponse {
   message: string;
@@ -10,6 +11,7 @@ export const chatAPI = {
     const response = await baseService.post<AskDocumentResponse>(
       "/document/ask_document",
       { question, documentId },
+      { timeout: env.documentApiTimeoutMs },
     );
 
     return response.data;

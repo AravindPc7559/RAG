@@ -4,6 +4,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { paths } from "@/app/router/paths";
 import { FullPageLoader } from "@/shared/components/FullPageLoader";
 import { PublicOnlyRoute } from "@/shared/routes/PublicOnlyRoute";
+import { ProtectedRoute } from "@/shared/routes/ProtectedRoute";
+import { AppShell } from "@/shared/components/AppShell";
 
 const DashboardPage = lazy(() =>
   import("@/features/dashboard").then((module) => ({
@@ -45,13 +47,13 @@ export function AppRouter() {
           <Route path={paths.register} element={<RegisterPage />} />
         </Route>
 
-        {/* <Route element={<ProtectedRoute />}>
-          <Route element={<AppShell />}> */}
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AppShell />}> 
             <Route index element={<DashboardPage />} />
             <Route path={paths.chat} element={<DocumentChat />} />
             <Route path={paths.users} element={<UsersPage />} />
-          {/* </Route>
-        </Route> */}
+           </Route>
+        </Route>
 
         <Route path="/dashboard" element={<Navigate to={paths.dashboard} replace />} />
         <Route path="*" element={<NotFoundPage />} />
