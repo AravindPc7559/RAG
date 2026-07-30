@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import mongoose from "mongoose";
 
 import {
   deleteDocumentFromCloudinary,
@@ -11,10 +12,9 @@ import type {
 } from "./document.repository.js";
 import type { UploadedDocumentSummary } from "./document.types.js";
 import { UserModel } from "../users/user.model.js";
-import mongoose from "mongoose";
 
 export class DocumentService {
-  constructor(private readonly documentRepository: DocumentRepository) { }
+  constructor(private readonly documentRepository: DocumentRepository) {}
 
   public async uploadDocument(
     document: Express.Multer.File,
@@ -27,21 +27,6 @@ export class DocumentService {
 
     const documentId = randomUUID();
     const storedDocument = await uploadDocumentToCloudinary(document, userId);
-    if (storedDocument) {
-      if (storedDocument) {
-        await UserModel.updateOne(
-          { _id: new mongoose.Types.ObjectId(userId) },
-          {
-            $push: {
-              documentUrls: {
-                publicId: storedDocument.publicId,
-                url: storedDocument.secureUrl,
-              },
-            },
-          },
-        );
-      }
-    }
     const chunks: DocumentChunkInput[] = [];
 
     try {
@@ -72,12 +57,34 @@ export class DocumentService {
         return null;
       }
 
+      const userUpdate = await UserModel.updateOne(
+        { _id: new mongoose.Types.ObjectId(userId) },
+        {
+          $push: {
+            documentUrls: {
+              documentId,
+              fileName: document.originalname,
+              publicId: storedDocument.publicId,
+              url: storedDocument.secureUrl,
+            },
+          },
+        },
+      );
+      if (!userUpdate.matchedCount) {
+        throw new Error("The document owner could not be updated.");
+      }
+
       return {
         documentId,
         fileName: document.originalname,
         chunkCount,
+        publicId: storedDocument.publicId,
+        url: storedDocument.secureUrl,
       };
     } catch (error) {
+      await this.documentRepository
+        .deleteDocumentChunks(documentId, userId)
+        .catch(() => undefined);
       await deleteDocumentFromCloudinary(storedDocument.publicId).catch(
         () => undefined,
       );

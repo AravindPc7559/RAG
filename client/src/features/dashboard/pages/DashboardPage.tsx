@@ -9,6 +9,12 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { createChatPath } from "@/app/router/paths";
+import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
+import {
+  addDocumentReference,
+  selectCurrentUser,
+  type UserDocumentReference,
+} from "@/features/auth";
 import { toApiErrorPayload } from "@/services/apiErrors";
 
 import { dashboardAPI } from "@/features/dashboard/api/dashboardApi";
@@ -25,8 +31,32 @@ function formatFileSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function getDocumentName(
+  document: UserDocumentReference,
+  index: number,
+) {
+  if (document.fileName?.trim()) {
+    return document.fileName;
+  }
+
+  try {
+    const pathName = new URL(document.url).pathname;
+    const encodedName = pathName.split("/").pop();
+    if (encodedName) {
+      return decodeURIComponent(encodedName);
+    }
+  } catch {
+    // Fall through to a readable name for legacy records.
+  }
+
+  return `Uploaded document ${index + 1}`;
+}
+
 export function DashboardPage() {
+  const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const currentUser = useAppSelector(selectCurrentUser);
+  const documents = currentUser?.documentUrls ?? [];
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -68,6 +98,14 @@ export function DashboardPage() {
 
       const response = await dashboardAPI.uploadDocument(uploadedFile);
       setIsReady(true);
+      dispatch(
+        addDocumentReference({
+          documentId: response.document.documentId,
+          fileName: response.document.fileName,
+          publicId: response.document.publicId,
+          url: response.document.url,
+        }),
+      );
       navigate(createChatPath(response.document.documentId), {
         state: {
           documentName: response.document.fileName,
@@ -78,7 +116,7 @@ export function DashboardPage() {
     } finally {
       setIsExtracting(false);
     }
-  }, [navigate, uploadedFile]);
+  }, [dispatch, navigate, uploadedFile]);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     selectDocument(event.target.files?.[0]);
@@ -204,6 +242,70 @@ export function DashboardPage() {
                 {uploadError}
               </p>
             )}
+          </div>
+        )}
+      </section>
+
+      <section className="document-library" aria-labelledby="document-library-title">
+        <header className="document-library__heading">
+          <div>
+            <span className="eyebrow">Your library</span>
+            <h2 id="document-library-title">Continue a conversation</h2>
+          </div>
+          <span className="document-library__count">
+            {documents.length} {documents.length === 1 ? "document" : "documents"}
+          </span>
+        </header>
+
+        {documents.length ? (
+          <div className="document-library__grid">
+            {documents.map((document, index) => {
+              const documentName = getDocumentName(document, index);
+              const canOpenChat = Boolean(document.documentId);
+
+              return (
+                <article
+                  className="document-library-card"
+                  key={document.documentId ?? document.publicId}
+                >
+                  <span className="document-library-card__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                      <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z" />
+                      <path d="M14 3v5h5M9 13h6M9 17h4" />
+                    </svg>
+                  </span>
+                  <div className="document-library-card__content">
+                    <span>Ready to ask</span>
+                    <h3 title={documentName}>{documentName}</h3>
+                    <p>
+                      {canOpenChat
+                        ? "Open this document and continue asking questions."
+                        : "This older upload needs to be uploaded again to chat."}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!document.documentId}
+                    onClick={() => {
+                      if (document.documentId) {
+                        navigate(createChatPath(document.documentId), {
+                          state: { documentName },
+                        });
+                      }
+                    }}
+                  >
+                    Open chat
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <path d="M5 12h14m-5-5 5 5-5 5" />
+                    </svg>
+                  </button>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="document-library__empty">
+            <p>Your uploaded documents will appear here.</p>
           </div>
         )}
       </section>

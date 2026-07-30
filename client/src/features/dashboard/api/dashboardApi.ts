@@ -5,6 +5,8 @@ export interface UploadedDocumentSummary {
   documentId: string;
   fileName: string;
   chunkCount: number;
+  publicId: string;
+  url: string;
 }
 
 interface UploadDocumentResponse {

@@ -94,6 +94,16 @@ export class DocumentRepository {
     return created.length;
   }
 
+  public async deleteDocumentChunks(
+    documentId: string,
+    userId: string,
+  ): Promise<void> {
+    await DocumentModel.deleteMany({
+      documentId,
+      userId: new mongoose.Types.ObjectId(userId),
+    });
+  }
+
   public async askDocument(
     question: string,
     userId: string,

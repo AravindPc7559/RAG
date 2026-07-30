@@ -7,6 +7,8 @@ import {
   restoreSession,
 } from "@/features/auth/store/authThunks";
 import type { AuthState } from "@/features/auth/types/auth.types";
+import type { PayloadAction } from "@reduxjs/toolkit";
+import type { UserDocumentReference } from "@/features/auth/types/auth.types";
 
 export const authInitialState: AuthState = {
   user: null,
@@ -21,6 +23,19 @@ const authSlice = createSlice({
   reducers: {
     clearAuthError(state) {
       state.error = null;
+    },
+    addDocumentReference(
+      state,
+      action: PayloadAction<UserDocumentReference>,
+    ) {
+      if (!state.user) {
+        return;
+      }
+
+      state.user.documentUrls = [
+        ...(state.user.documentUrls ?? []),
+        action.payload,
+      ];
     },
   },
   extraReducers: (builder) => {
@@ -88,5 +103,6 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearAuthError } = authSlice.actions;
+export const { addDocumentReference, clearAuthError } =
+  authSlice.actions;
 export default authSlice.reducer;

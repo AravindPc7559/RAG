@@ -11,6 +11,13 @@ import {
   type UserStatus,
 } from "./user.types.js";
 
+export interface UserDocumentReference {
+  documentId?: string;
+  fileName?: string;
+  publicId: string;
+  url: string;
+}
+
 export interface UserEntity {
   name: string;
   email: string;
@@ -19,13 +26,36 @@ export interface UserEntity {
   status: UserStatus;
   createdAt: Date;
   updatedAt: Date;
-  documentUrls: {
-    publicId: string,
-    url: string
-  }[];
+  documentUrls: UserDocumentReference[];
 }
 
 export type UserDocument = HydratedDocument<UserEntity>;
+
+const userDocumentReferenceSchema = new Schema<UserDocumentReference>(
+  {
+    documentId: {
+      type: String,
+      trim: true,
+    },
+    fileName: {
+      type: String,
+      trim: true,
+    },
+    publicId: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    url: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+  },
+  {
+    _id: false,
+  },
+);
 
 const userSchema = new Schema<UserEntity>(
   {
@@ -62,9 +92,10 @@ const userSchema = new Schema<UserEntity>(
       required: true,
       index: true,
     },
-    documentUrls:{
-      type: [],
-    }
+    documentUrls: {
+      type: [userDocumentReferenceSchema],
+      default: [],
+    },
   },
   {
     timestamps: true,

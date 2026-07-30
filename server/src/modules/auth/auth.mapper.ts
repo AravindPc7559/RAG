@@ -7,6 +7,14 @@ export function toAuthUser(user: UserDocument): AuthUser {
     name: user.name,
     email: user.email,
     role: user.role,
+    documentUrls: (user.documentUrls ?? []).map((document) => ({
+      ...(document.documentId
+        ? { documentId: document.documentId }
+        : {}),
+      ...(document.fileName ? { fileName: document.fileName } : {}),
+      publicId: document.publicId,
+      url: document.url,
+    })),
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
   };

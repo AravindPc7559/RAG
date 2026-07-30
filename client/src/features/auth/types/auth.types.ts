@@ -3,11 +3,19 @@ import type { AsyncStatus } from "@/shared/types/asyncState";
 
 export type UserRole = "admin" | "member" | "viewer";
 
+export interface UserDocumentReference {
+  documentId?: string;
+  fileName?: string;
+  publicId: string;
+  url: string;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
   email: string;
   role: UserRole;
+  documentUrls?: UserDocumentReference[];
   createdAt: string;
   updatedAt: string;
 }
