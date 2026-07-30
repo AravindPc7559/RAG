@@ -1,4 +1,4 @@
-import mongoose from "mongoose";
+import mongoose, { Mongoose } from "mongoose";
 import OpenAI from "openai";
 
 import { env } from "../../config/env.js";
@@ -10,6 +10,8 @@ export interface DocumentChunkInput {
   documentId: string;
   fileName: string;
   mimeType: string;
+  cloudinaryPublicId: string;
+  cloudinaryUrl: string;
   chunkIndex: number;
   embedding: number[];
   text: string;
@@ -22,6 +24,12 @@ interface SearchResult {
 
 export class DocumentRepository {
   private openAIClient: OpenAI | null = null;
+
+  public async keywordSearch(question: string, userId: string){
+    const response = await DocumentModel.find({
+      userId: new mongoose.Types.ObjectId(userId)
+    })
+  }
 
   public async createEmbedding(text: string): Promise<number[]> {
     const response = await this.getOpenAIClient().embeddings.create({

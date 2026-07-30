@@ -5,6 +5,8 @@ export interface IDocument {
   documentId: string;
   fileName: string;
   mimeType: string;
+  cloudinaryPublicId: string;
+  cloudinaryUrl: string;
   chunkIndex: number;
   embedding: number[];
   text: string;

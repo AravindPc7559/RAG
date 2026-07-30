@@ -25,6 +25,16 @@ const documentSchema = new mongoose.Schema<IDocument>(
       required: true,
       trim: true,
     },
+    cloudinaryPublicId: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    cloudinaryUrl: {
+      type: String,
+      required: true,
+      trim: true,
+    },
     chunkIndex: {
       type: Number,
       required: true,

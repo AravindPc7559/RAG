@@ -40,6 +40,9 @@ const envSchema = z.object({
     .trim()
     .min(1)
     .default("mongodb://127.0.0.1:27017/rag"),
+  CLOUDINARY_CLOUD_NAME: optionalString,
+  CLOUDINARY_API_KEY: optionalString,
+  CLOUDINARY_API_SECRET: optionalString,
   OPENAI_API_KEY: optionalString,
   OPENAI_EMBEDDING_MODEL: z
     .string()

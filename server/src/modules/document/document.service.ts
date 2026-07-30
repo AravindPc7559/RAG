@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 
+import {
+  deleteDocumentFromCloudinary,
+  uploadDocumentToCloudinary,
+} from "../../shared/utils/cloudinaryStorage.js";
 import { createTextChunks } from "../../shared/utils/createTextChunks.js";
 import type {
   DocumentChunkInput,
@@ -20,37 +24,48 @@ export class DocumentService {
     }
 
     const documentId = randomUUID();
+    const storedDocument = await uploadDocumentToCloudinary(document, userId);
     const chunks: DocumentChunkInput[] = [];
 
-    for (const [chunkIndex, text] of textChunks.entries()) {
-      const embedding =
-        await this.documentRepository.createEmbedding(text);
-      if (!embedding.length) {
-        continue;
+    try {
+      for (const [chunkIndex, text] of textChunks.entries()) {
+        const embedding =
+          await this.documentRepository.createEmbedding(text);
+        if (!embedding.length) {
+          continue;
+        }
+
+        chunks.push({
+          userId,
+          documentId,
+          fileName: document.originalname,
+          mimeType: document.mimetype,
+          cloudinaryPublicId: storedDocument.publicId,
+          cloudinaryUrl: storedDocument.secureUrl,
+          chunkIndex,
+          embedding,
+          text,
+        });
       }
 
-      chunks.push({
-        userId,
+      const chunkCount =
+        await this.documentRepository.createDocumentChunks(chunks);
+      if (!chunkCount) {
+        await deleteDocumentFromCloudinary(storedDocument.publicId);
+        return null;
+      }
+
+      return {
         documentId,
         fileName: document.originalname,
-        mimeType: document.mimetype,
-        chunkIndex,
-        embedding,
-        text,
-      });
+        chunkCount,
+      };
+    } catch (error) {
+      await deleteDocumentFromCloudinary(storedDocument.publicId).catch(
+        () => undefined,
+      );
+      throw error;
     }
-
-    const chunkCount =
-      await this.documentRepository.createDocumentChunks(chunks);
-    if (!chunkCount) {
-      return null;
-    }
-
-    return {
-      documentId,
-      fileName: document.originalname,
-      chunkCount,
-    };
   }
 
   public async askDocument(
