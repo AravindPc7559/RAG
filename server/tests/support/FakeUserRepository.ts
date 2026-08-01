@@ -8,10 +8,6 @@ import type {
   CreateUserRecord,
   UserRepository,
 } from "../../src/modules/users/user.repository.js";
-import type {
-  ListUsersFilters,
-  UpdateUserInput,
-} from "../../src/modules/users/user.types.js";
 
 export class FakeUserRepository implements UserRepository {
   private readonly users = new Map<string, UserDocument>();
@@ -47,41 +43,5 @@ export class FakeUserRepository implements UserRepository {
 
   public findByEmailWithPassword(email: string) {
     return this.findByEmail(email);
-  }
-
-  public list(filters: ListUsersFilters) {
-    const search = filters.search?.toLowerCase();
-    return Promise.resolve(
-      [...this.users.values()].filter((user) => {
-        const matchesSearch = search
-          ? user.name.toLowerCase().includes(search) ||
-            user.email.toLowerCase().includes(search)
-          : true;
-        const matchesRole = filters.role ? user.role === filters.role : true;
-        const matchesStatus = filters.status
-          ? user.status === filters.status
-          : true;
-        return matchesSearch && matchesRole && matchesStatus;
-      }),
-    );
-  }
-
-  public async update(id: string, input: UpdateUserInput) {
-    const user = await this.findById(id);
-
-    if (!user) {
-      return null;
-    }
-
-    user.set({
-      ...input,
-      ...(input.email ? { email: input.email.toLowerCase() } : {}),
-      updatedAt: new Date(),
-    });
-    return user;
-  }
-
-  public delete(id: string) {
-    return Promise.resolve(this.users.delete(id));
   }
 }

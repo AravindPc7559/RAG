@@ -5,6 +5,7 @@ import {
   disconnectDatabase,
 } from "../src/config/database.js";
 import { logger } from "../src/config/logger.js";
+import { UserModel } from "../src/modules/users/user.model.js";
 import { MongoUserRepository } from "../src/modules/users/user.repository.js";
 import { hashPassword } from "../src/shared/security/passwordHasher.js";
 
@@ -23,10 +24,10 @@ async function seedAdmin() {
     const existing = await repository.findByEmail(input.ADMIN_EMAIL);
 
     if (existing) {
-      await repository.update(existing.id, {
+      await UserModel.findByIdAndUpdate(existing.id, {
         role: "admin",
         status: "active",
-      });
+      }).exec();
       logger.info({ email: input.ADMIN_EMAIL }, "Existing user promoted to admin");
       return;
     }

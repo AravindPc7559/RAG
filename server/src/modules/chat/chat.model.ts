@@ -5,12 +5,14 @@ import mongoose, {
   type Types,
 } from "mongoose";
 
-export interface ChatEntity {
+export type ChatEntity = {
+  id: string;
   question: string;
   answer: string;
-  userId: Types.ObjectId;
+  userId?: Types.ObjectId;
+  documentId?: string;
   createdAt: Date;
-  updatedAt: Date;
+  updatedAt?: Date;
 }
 
 export type ChatDocument = HydratedDocument<ChatEntity>;
@@ -33,12 +35,20 @@ const chatSchema = new Schema<ChatEntity>(
       required: true,
       index: true,
     },
+    documentId: {
+      type: String,
+      required: true,
+      index: true,
+      trim: true,
+    },
   },
   {
     timestamps: true,
     versionKey: false,
   },
 );
+
+chatSchema.index({ userId: 1, documentId: 1, createdAt: -1 });
 
 export const ChatModel: Model<ChatEntity> =
   mongoose.models.Chat ?? mongoose.model<ChatEntity>("Chat", chatSchema);

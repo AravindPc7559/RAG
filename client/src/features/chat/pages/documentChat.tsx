@@ -1,23 +1,44 @@
 import {
+  useCallback,
+  useEffect,
+  useRef,
   useState,
   type FormEvent,
   type KeyboardEvent,
+  type UIEvent,
 } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 
 import { paths } from "@/app/router/paths";
-import { chatAPI } from "@/features/chat/api/chatApi";
+import { chatAPI, type ChatEntity } from "@/features/chat/api/chatApi";
 import { toApiErrorPayload } from "@/services/apiErrors";
+
+const HISTORY_PAGE_SIZE = 10;
+const TOP_SCROLL_THRESHOLD_PX = 48;
 
 interface ChatLocationState {
   documentName?: string;
 }
 
 interface ChatExchange {
-  id: number;
+  id: string;
   question: string;
   answer: string | null;
   status: "loading" | "succeeded" | "failed";
+  createdAt: string;
+}
+
+function toExchange(chat: ChatEntity): ChatExchange {
+  return {
+    id: chat.id,
+    question: chat.question,
+    answer: chat.answer,
+    status: "succeeded",
+    createdAt:
+      typeof chat.createdAt === "string"
+        ? chat.createdAt
+        : new Date(chat.createdAt).toISOString(),
+  };
 }
 
 export default function DocumentChat() {
@@ -25,9 +46,134 @@ export default function DocumentChat() {
   const { documentId } = useParams<{ documentId: string }>();
   const chatState = location.state as ChatLocationState | null;
   const documentName = chatState?.documentName ?? "Uploaded document";
+  const conversationRef = useRef<HTMLElement>(null);
+  const exchangesRef = useRef<ChatExchange[]>([]);
+  const hasMoreHistoryRef = useRef(false);
+  const isLoadingMoreRef = useRef(false);
+
   const [question, setQuestion] = useState("");
   const [exchanges, setExchanges] = useState<ChatExchange[]>([]);
   const [isAnswering, setIsAnswering] = useState(false);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(Boolean(documentId));
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreHistory, setHasMoreHistory] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    exchangesRef.current = exchanges;
+  }, [exchanges]);
+
+  useEffect(() => {
+    hasMoreHistoryRef.current = hasMoreHistory;
+  }, [hasMoreHistory]);
+
+  const scrollToBottom = useCallback(() => {
+    const container = conversationRef.current;
+    if (!container) {
+      return;
+    }
+
+    container.scrollTop = container.scrollHeight;
+  }, []);
+
+  const loadHistory = useCallback(
+    async (mode: "initial" | "older") => {
+      if (!documentId || isLoadingMoreRef.current) {
+        return;
+      }
+
+      let before: string | undefined;
+      if (mode === "older") {
+        const oldest = exchangesRef.current[0];
+        if (!oldest || !hasMoreHistoryRef.current) {
+          return;
+        }
+        before = oldest.createdAt;
+      }
+
+      isLoadingMoreRef.current = true;
+      if (mode === "initial") {
+        setIsHistoryLoading(true);
+      } else {
+        setIsLoadingMore(true);
+      }
+      setHistoryError(null);
+
+      const container = conversationRef.current;
+      const previousHeight = container?.scrollHeight ?? 0;
+      const previousTop = container?.scrollTop ?? 0;
+
+      try {
+        const response = await chatAPI.getChats(documentId, {
+          limit: HISTORY_PAGE_SIZE,
+          before,
+        });
+        const olderExchanges = [...response.chats]
+          .reverse()
+          .map(toExchange);
+
+        setHasMoreHistory(response.hasMore);
+        setExchanges((current) => {
+          if (mode === "initial") {
+            return olderExchanges;
+          }
+
+          const existingIds = new Set(current.map((item) => item.id));
+          const uniqueOlder = olderExchanges.filter(
+            (item) => !existingIds.has(item.id),
+          );
+          return [...uniqueOlder, ...current];
+        });
+
+        requestAnimationFrame(() => {
+          if (mode === "initial") {
+            scrollToBottom();
+            return;
+          }
+
+          if (!container) {
+            return;
+          }
+
+          const heightDelta = container.scrollHeight - previousHeight;
+          container.scrollTop = previousTop + heightDelta;
+        });
+      } catch (error) {
+        setHistoryError(toApiErrorPayload(error).message);
+      } finally {
+        isLoadingMoreRef.current = false;
+        setIsHistoryLoading(false);
+        setIsLoadingMore(false);
+      }
+    },
+    [documentId, scrollToBottom],
+  );
+
+  useEffect(() => {
+    if (!documentId) {
+      setIsHistoryLoading(false);
+      setExchanges([]);
+      setHasMoreHistory(false);
+      return;
+    }
+
+    setExchanges([]);
+    setHasMoreHistory(false);
+    void loadHistory("initial");
+  }, [documentId, loadHistory]);
+
+  const handleConversationScroll = (event: UIEvent<HTMLElement>) => {
+    if (
+      event.currentTarget.scrollTop > TOP_SCROLL_THRESHOLD_PX ||
+      !hasMoreHistoryRef.current ||
+      isLoadingMoreRef.current ||
+      isHistoryLoading
+    ) {
+      return;
+    }
+
+    void loadHistory("older");
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -37,7 +183,8 @@ export default function DocumentChat() {
       return;
     }
 
-    const exchangeId = Date.now();
+    const exchangeId = `local-${Date.now()}`;
+    const createdAt = new Date().toISOString();
     setQuestion("");
     setIsAnswering(true);
     setExchanges((current) => [
@@ -47,8 +194,10 @@ export default function DocumentChat() {
         question: submittedQuestion,
         answer: null,
         status: "loading",
+        createdAt,
       },
     ]);
+    requestAnimationFrame(scrollToBottom);
 
     try {
       const response = await chatAPI.askDocument(
@@ -77,6 +226,7 @@ export default function DocumentChat() {
       );
     } finally {
       setIsAnswering(false);
+      requestAnimationFrame(scrollToBottom);
     }
   };
 
@@ -88,6 +238,9 @@ export default function DocumentChat() {
       event.currentTarget.form?.requestSubmit();
     }
   };
+
+  const showWelcome =
+    !isHistoryLoading && exchanges.length === 0 && !historyError;
 
   return (
     <main className="chat-page">
@@ -115,10 +268,33 @@ export default function DocumentChat() {
       </header>
 
       <section
-        className={`chat-conversation${exchanges.length === 0 ? " chat-conversation--empty" : ""}`}
+        ref={conversationRef}
+        className={`chat-conversation${showWelcome ? " chat-conversation--empty" : ""}`}
         aria-live="polite"
+        onScroll={handleConversationScroll}
       >
-        {exchanges.length === 0 ? (
+        {isHistoryLoading ? (
+          <div className="chat-history-status" role="status">
+            <span className="spinner" aria-hidden="true" />
+            Loading previous chats…
+          </div>
+        ) : null}
+
+        {!isHistoryLoading && historyError ? (
+          <div className="chat-history-status chat-history-status--error" role="alert">
+            <strong>Could not load chat history.</strong>
+            <span>{historyError}</span>
+            <button
+              type="button"
+              className="button button--secondary"
+              onClick={() => void loadHistory("initial")}
+            >
+              Try again
+            </button>
+          </div>
+        ) : null}
+
+        {showWelcome ? (
           <div className="chat-welcome">
             <span className="chat-welcome__icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none">
@@ -133,8 +309,24 @@ export default function DocumentChat() {
               in the content of <strong>{documentName}</strong>.
             </p>
           </div>
-        ) : (
+        ) : null}
+
+        {!isHistoryLoading && exchanges.length > 0 ? (
           <div className="chat-exchanges">
+            {isLoadingMore ? (
+              <div
+                className="chat-history-status chat-history-status--inline"
+                role="status"
+              >
+                <span className="spinner" aria-hidden="true" />
+                Loading earlier chats…
+              </div>
+            ) : null}
+
+            {!hasMoreHistory ? (
+              <p className="chat-history-end">Beginning of conversation</p>
+            ) : null}
+
             {exchanges.map((exchange, index) => (
               <article className="chat-exchange" key={exchange.id}>
                 <div className="chat-message chat-message--question">
@@ -168,7 +360,7 @@ export default function DocumentChat() {
               </article>
             ))}
           </div>
-        )}
+        ) : null}
       </section>
 
       <footer className="chat-composer-wrap">

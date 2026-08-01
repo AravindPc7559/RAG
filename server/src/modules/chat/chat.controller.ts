@@ -32,4 +32,37 @@ export class ChatController {
       ...(answer ? { answer } : {}),
     });
   };
+
+  public getChats: RequestHandler = async (request, response) => {
+    const documentIdParam = request.params.documentId;
+    const limit = Number.parseInt(String(request.query.limit ?? ""), 10) || 10;
+    const beforeParam = request.query.before;
+    const before =
+      typeof beforeParam === "string" && beforeParam.trim()
+        ? beforeParam.trim()
+        : undefined;
+    const userId = request.user?.id;
+    const documentId =
+      typeof documentIdParam === "string" ? documentIdParam.trim() : "";
+
+    if (!documentId || !userId) {
+      response
+        .status(400)
+        .json({ message: "No document id or user id provided" });
+      return;
+    }
+
+    const chats = await this.chatService.getChats(
+      documentId,
+      limit,
+      userId,
+      before,
+    );
+
+    response.status(200).json({
+      message: "Chats fetched successfully",
+      chats,
+      hasMore: chats.length === limit,
+    });
+  };
 }

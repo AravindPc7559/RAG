@@ -8,7 +8,6 @@ import type { DocumentRepository } from "../modules/document/document.repository
 import { createHealthRoutes } from "../modules/health/health.routes.js";
 import { createUserModule } from "../modules/users/user.module.js";
 import type { UserRepository } from "../modules/users/user.repository.js";
-import { createUserRoutes } from "../modules/users/user.routes.js";
 
 export interface ApiDependencies {
   userRepository?: UserRepository;
@@ -28,7 +27,6 @@ export function createApiRouter(dependencies: ApiDependencies = {}) {
 
   router.use("/health", createHealthRoutes());
   router.use("/auth", auth.router);
-  router.use("/users", createUserRoutes(users.controller, auth.middleware));
   router.use("/document", document.router);
   router.use("/chat", chat.router);
 

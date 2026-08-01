@@ -17,5 +17,10 @@ export function createChatRoutes(
     asyncHandler(controller.askDocument),
   );
 
+  router.get(
+    "/chats/:documentId", 
+    asyncHandler(controller.getChats)
+  )
+
   return router;
 }

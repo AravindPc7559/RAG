@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { env } from "../../config/env.js";
 import { AppError } from "../../shared/errors/AppError.js";
 import { DocumentModel } from "../document/document.model.js";
+import { ChatEntity, ChatModel } from "./chat.model.js";
 
 export interface SearchResult {
   documentId: string;
@@ -17,6 +18,20 @@ const HYBRID_CANDIDATE_MULTIPLIER = 4;
 
 export class ChatRepository {
   private openAIClient: OpenAI | null = null;
+
+  public async saveChat(
+    question: string,
+    answer: string,
+    userId: string,
+    documentId: string,
+  ) {
+    await ChatModel.create({
+      question,
+      answer,
+      userId: new mongoose.Types.ObjectId(userId),
+      documentId,
+    });
+  }
 
   public async keywordSearch(
     question: string,
@@ -94,6 +109,11 @@ export class ChatRepository {
       : "";
 
     const output = await this.getProperAnswer(question, answerCollection);
+
+    if (output && documentId) {
+      await this.saveChat(question, output, userId, documentId);
+      return output;
+    }
 
     return output || null;
   }
@@ -202,6 +222,36 @@ ${question}
         },
       },
     ]);
+  }
+
+  public async getChats(
+    documentId: string,
+    limit: number,
+    userId: string,
+    before?: string,
+  ): Promise<ChatEntity[]> {
+    const beforeDate = before ? new Date(before) : null;
+    const hasValidBefore =
+      beforeDate !== null && !Number.isNaN(beforeDate.getTime());
+
+    const chats = await ChatModel.find({
+      userId: new mongoose.Types.ObjectId(userId),
+      documentId,
+      ...(hasValidBefore ? { createdAt: { $lt: beforeDate } } : {}),
+    })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    return chats.map((chat) => ({
+      id: chat._id.toString(),
+      question: chat.question,
+      answer: chat.answer,
+      userId: chat.userId,
+      documentId: chat.documentId,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+    }));
   }
 }
 

@@ -32,11 +32,6 @@ const DocumentsPage = lazy(() =>
     default: module.DocumentsPage,
   })),
 );
-const UsersPage = lazy(() =>
-  import("@/features/users").then((module) => ({
-    default: module.UsersPage,
-  })),
-);
 const NotFoundPage = lazy(() =>
   import("@/features/not-found").then((module) => ({
     default: module.NotFoundPage,
@@ -53,12 +48,11 @@ export function AppRouter() {
         </Route>
 
         <Route element={<ProtectedRoute />}>
-          <Route element={<AppShell />}> 
+          <Route element={<AppShell />}>
             <Route index element={<DashboardPage />} />
             <Route path={paths.chat} element={<DocumentChat />} />
             <Route path={paths.documents} element={<DocumentsPage />} />
-            <Route path={paths.users} element={<UsersPage />} />
-           </Route>
+          </Route>
         </Route>
 
         <Route path="/dashboard" element={<Navigate to={paths.dashboard} replace />} />

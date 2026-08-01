@@ -22,17 +22,17 @@ interface TestUser {
   role: string;
 }
 
-describe("authentication and protected users API", () => {
+describe("authentication API", () => {
   it("rejects protected requests without a session cookie", async () => {
     const response = await request(
       createApp({ userRepository: new FakeUserRepository() }),
-    ).get("/api/v1/users");
+    ).get("/api/v1/auth/me");
 
     expect(response.status).toBe(401);
     expect((response.body as ErrorBody).code).toBe("UNAUTHORIZED");
   });
 
-  it("registers, restores the cookie session, and lists users", async () => {
+  it("registers, restores the cookie session, and returns the current user", async () => {
     const agent = request.agent(
       createApp({ userRepository: new FakeUserRepository() }),
     );
@@ -56,10 +56,6 @@ describe("authentication and protected users API", () => {
     expect((session.body as SuccessBody<TestUser>).data.email).toBe(
       "member@example.com",
     );
-
-    const users = await agent.get("/api/v1/users");
-    expect(users.status).toBe(200);
-    expect((users.body as SuccessBody<TestUser[]>).data).toHaveLength(1);
   });
 
   it("prevents duplicate registration", async () => {
@@ -92,27 +88,6 @@ describe("authentication and protected users API", () => {
 
     expect(response.status).toBe(400);
     expect((response.body as ErrorBody).code).toBe("BAD_REQUEST");
-  });
-
-  it("prevents members from using admin-only user mutations", async () => {
-    const agent = request.agent(
-      createApp({ userRepository: new FakeUserRepository() }),
-    );
-
-    await agent.post("/api/v1/auth/register").send({
-      name: "Workspace Member",
-      email: "member@example.com",
-      password: "strong-password",
-    });
-    const response = await agent.post("/api/v1/users").send({
-      name: "Another User",
-      email: "another@example.com",
-      password: "another-password",
-      role: "viewer",
-    });
-
-    expect(response.status).toBe(403);
-    expect((response.body as ErrorBody).code).toBe("FORBIDDEN");
   });
 
   it("clears the session cookie on logout", async () => {

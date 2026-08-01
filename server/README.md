@@ -116,12 +116,9 @@ src/
 │   │   ├── auth.mapper.ts
 │   │   └── auth.module.ts
 │   ├── users/
-│   │   ├── user.controller.ts
-│   │   ├── user.service.ts
 │   │   ├── user.repository.ts
 │   │   ├── user.model.ts
-│   │   ├── user.routes.ts
-│   │   ├── user.schema.ts
+│   │   ├── user.types.ts
 │   │   └── user.module.ts
 │   ├── document/
 │   │   ├── document.controller.ts
@@ -199,15 +196,10 @@ POST /api/v1/auth/logout
 
 POST /api/v1/document/upload_document
 POST /api/v1/chat/ask_document/:documentId
-
-GET    /api/v1/users
-GET    /api/v1/users/:id
-POST   /api/v1/users       admin only
-PATCH  /api/v1/users/:id   admin only
-DELETE /api/v1/users/:id   admin only
+GET  /api/v1/chat/chats/:documentId
 ```
 
-All user endpoints require a valid cookie session. Authentication validates the
+Protected endpoints require a valid cookie session. Authentication validates the
 JWT signature and reloads the account on every request, so deleted or disabled
 accounts lose access immediately.
 
