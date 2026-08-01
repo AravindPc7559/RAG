@@ -13,10 +13,11 @@ export function createChatModule(
   router: Router;
   controller: ChatController;
   service: ChatService;
+  repository: ChatRepository;
 } {
   const service = new ChatService(repository);
   const controller = new ChatController(service);
   const router = createChatRoutes(controller, auth);
 
-  return { router, controller, service };
+  return { router, controller, service, repository };
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { createChatPath } from "@/app/router/paths";
+import { createChatPath, createPullRequestsPath } from "@/app/router/paths";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { refreshSession } from "@/features/auth/store/authThunks";
 import { GithubConnectionHeader } from "@/features/github/components/GithubConnectionHeader";
@@ -245,6 +245,32 @@ export function GitHubPage() {
     });
   }
 
+  function handleOpenPullRequests(repository: GithubRepository) {
+    const key = knowledgeRepoKey(repository.owner, repository.name);
+    const knowledge = knowledgeByRepo[key]?.knowledgeBase;
+
+    if (!knowledge?.knowledgeBaseId) {
+      showToast("Import this repository before reviewing pull requests.", "error");
+      return;
+    }
+
+    if (isKnowledgeIndexing(knowledge)) {
+      showToast("Knowledge base is still indexing. Try again shortly.", "info");
+      return;
+    }
+
+    if (knowledge.status !== "ready") {
+      showToast(
+        knowledge.errorMessage ||
+          "Knowledge base is not ready yet. Import or Sync first.",
+        "error",
+      );
+      return;
+    }
+
+    navigate(createPullRequestsPath(repository.owner, repository.name));
+  }
+
   const pageError =
     connectionError?.message || repositoriesError?.message || null;
   const showInitialLoading =
@@ -359,6 +385,7 @@ export function GitHubPage() {
                     onSync={(repo) => void handleSyncKnowledge(repo)}
                     onImport={(repo) => void handleImport(repo)}
                     onOpenChat={handleOpenChat}
+                    onOpenPullRequests={handleOpenPullRequests}
                   />
                 );
               })}

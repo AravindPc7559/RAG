@@ -242,14 +242,230 @@ export async function fetchFileContent(
   }
 }
 
+interface GithubApiPullRequest {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: string;
+  draft?: boolean;
+  html_url: string;
+  created_at: string;
+  updated_at: string;
+  user: {
+    login: string;
+    avatar_url: string;
+  } | null;
+  head: {
+    sha: string;
+    ref: string;
+  };
+  base: {
+    sha: string;
+    ref: string;
+  };
+  labels?: Array<{ name: string }>;
+  additions?: number;
+  deletions?: number;
+  changed_files?: number;
+}
+
+interface GithubApiPullRequestFile {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+  previous_filename?: string;
+}
+
+export interface GithubPullRequestSummary {
+  id: number;
+  number: number;
+  title: string;
+  body: string | null;
+  state: "open" | "closed";
+  draft: boolean;
+  htmlUrl: string;
+  createdAt: string;
+  updatedAt: string;
+  authorLogin: string;
+  authorAvatarUrl: string | null;
+  headSha: string;
+  headRef: string;
+  baseRef: string;
+  labels: string[];
+  additions?: number;
+  deletions?: number;
+  changedFiles?: number;
+}
+
+export interface GithubPullRequestFile {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  changes: number;
+  patch?: string;
+  previousFilename?: string;
+}
+
+export interface CreatePullRequestReviewCommentInput {
+  path: string;
+  body: string;
+  line: number;
+  side?: "LEFT" | "RIGHT";
+}
+
+function mapPullRequest(pr: GithubApiPullRequest): GithubPullRequestSummary {
+  return {
+    id: pr.id,
+    number: pr.number,
+    title: pr.title,
+    body: pr.body,
+    state: pr.state === "closed" ? "closed" : "open",
+    draft: Boolean(pr.draft),
+    htmlUrl: pr.html_url,
+    createdAt: pr.created_at,
+    updatedAt: pr.updated_at,
+    authorLogin: pr.user?.login ?? "unknown",
+    authorAvatarUrl: pr.user?.avatar_url ?? null,
+    headSha: pr.head.sha,
+    headRef: pr.head.ref,
+    baseRef: pr.base.ref,
+    labels: (pr.labels ?? []).map((label) => label.name),
+    ...(pr.additions !== undefined ? { additions: pr.additions } : {}),
+    ...(pr.deletions !== undefined ? { deletions: pr.deletions } : {}),
+    ...(pr.changed_files !== undefined
+      ? { changedFiles: pr.changed_files }
+      : {}),
+  };
+}
+
+export async function fetchPullRequests(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  query: {
+    state?: "open" | "closed" | "all";
+    page?: number;
+    perPage?: number;
+  } = {},
+) {
+  const page = query.page && query.page > 0 ? query.page : 1;
+  const perPage =
+    query.perPage && query.perPage > 0 ? Math.min(query.perPage, 50) : 20;
+  const state = query.state ?? "open";
+  const params = new URLSearchParams({
+    state,
+    page: String(page),
+    per_page: String(perPage),
+    sort: "updated",
+    direction: "desc",
+  });
+
+  const { data, linkHeader } = await githubFetch<GithubApiPullRequest[]>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls?${params.toString()}`,
+    accessToken,
+  );
+
+  return {
+    pullRequests: data.map(mapPullRequest),
+    page,
+    perPage,
+    hasNextPage: hasNextPage(linkHeader),
+  };
+}
+
+export async function fetchPullRequest(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  number: number,
+) {
+  const { data } = await githubFetch<GithubApiPullRequest>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`,
+    accessToken,
+  );
+  return mapPullRequest(data);
+}
+
+export async function fetchPullRequestFiles(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  number: number,
+): Promise<GithubPullRequestFile[]> {
+  const { data } = await githubFetch<GithubApiPullRequestFile[]>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}/files?per_page=100`,
+    accessToken,
+  );
+
+  return data.map((file) => ({
+    filename: file.filename,
+    status: file.status,
+    additions: file.additions,
+    deletions: file.deletions,
+    changes: file.changes,
+    ...(file.patch ? { patch: file.patch } : {}),
+    ...(file.previous_filename
+      ? { previousFilename: file.previous_filename }
+      : {}),
+  }));
+}
+
+export async function createPullRequestReview(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  number: number,
+  input: {
+    commitId: string;
+    body?: string;
+    event?: "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+    comments: CreatePullRequestReviewCommentInput[];
+  },
+) {
+  const { data } = await githubFetch<{
+    id: number;
+    html_url: string;
+    state: string;
+  }>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}/reviews`,
+    accessToken,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        commit_id: input.commitId,
+        body: input.body ?? "",
+        event: input.event ?? "COMMENT",
+        comments: input.comments.map((comment) => ({
+          path: comment.path,
+          body: comment.body,
+          line: comment.line,
+          side: comment.side ?? "RIGHT",
+        })),
+      }),
+    },
+  );
+
+  return {
+    id: data.id,
+    htmlUrl: data.html_url,
+    state: data.state,
+  };
+}
+
 /**
- * Extension points for future features (branches, PRs, issues, etc.).
- * Keep GitHub REST calls centralized here as those features land.
+ * Extension points for future features (branches, issues, etc.).
  */
 export const githubApiExtensions = {
   // branches: (token, owner, repo) => ...
   // commits: (token, owner, repo) => ...
-  // pullRequests: (token, owner, repo) => ...
   // issues: (token, owner, repo) => ...
   // contributors: (token, owner, repo) => ...
 } as const;

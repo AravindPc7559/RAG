@@ -37,6 +37,16 @@ const GitHubPage = lazy(() =>
     default: module.GitHubPage,
   })),
 );
+const PullRequestsPage = lazy(() =>
+  import("@/features/review").then((module) => ({
+    default: module.PullRequestsPage,
+  })),
+);
+const PullRequestReviewPage = lazy(() =>
+  import("@/features/review").then((module) => ({
+    default: module.PullRequestReviewPage,
+  })),
+);
 const NotFoundPage = lazy(() =>
   import("@/features/not-found").then((module) => ({
     default: module.NotFoundPage,
@@ -58,6 +68,11 @@ export function AppRouter() {
             <Route path={paths.chat} element={<DocumentChat />} />
             <Route path={paths.documents} element={<DocumentsPage />} />
             <Route path={paths.github} element={<GitHubPage />} />
+            <Route path={paths.githubPulls} element={<PullRequestsPage />} />
+            <Route
+              path={paths.githubPullReview}
+              element={<PullRequestReviewPage />}
+            />
           </Route>
         </Route>
 

@@ -11,6 +11,13 @@ export interface SearchResult {
   chunkIndex: number;
   text: string;
   score: number;
+  sourcePath?: string;
+}
+
+export interface RetrievedContextChunk {
+  text: string;
+  sourcePath?: string;
+  score: number;
 }
 
 const RRF_RANKING_CONSTANT = 60;
@@ -57,6 +64,7 @@ export class ChatRepository {
           documentId: 1,
           chunkIndex: 1,
           text: 1,
+          sourcePath: 1,
           score: { $meta: "textScore" },
         },
       },
@@ -69,6 +77,44 @@ export class ChatRepository {
         $limit: env.VECTOR_SEARCH_LIMIT * HYBRID_CANDIDATE_MULTIPLIER,
       },
     ]);
+  }
+
+  public async retrieveContext(input: {
+    userId: string;
+    knowledgeBaseId: string;
+    query: string;
+    limit?: number;
+  }): Promise<RetrievedContextChunk[]> {
+    const queryVector = await this.createEmbedding(input.query);
+    if (!queryVector.length) {
+      return [];
+    }
+
+    const limit = input.limit ?? env.VECTOR_SEARCH_LIMIT;
+    const vectorSearch =
+      env.VECTOR_SEARCH_MODE === "mongodb"
+        ? this.mongodbVectorSearch(
+            queryVector,
+            input.userId,
+            input.knowledgeBaseId,
+          )
+        : this.localVectorSearch(
+            queryVector,
+            input.userId,
+            input.knowledgeBaseId,
+          );
+    const [vectorResults, keywordResults] = await Promise.all([
+      vectorSearch,
+      this.keywordSearch(input.query, input.userId, input.knowledgeBaseId),
+    ]);
+
+    return mergeSearchResults(vectorResults, keywordResults, limit).map(
+      (result) => ({
+        text: result.text,
+        score: result.score,
+        ...(result.sourcePath ? { sourcePath: result.sourcePath } : {}),
+      }),
+    );
   }
 
   public async createEmbedding(text: string): Promise<number[]> {
@@ -173,7 +219,13 @@ ${question}
       userId: new mongoose.Types.ObjectId(userId),
       ...(documentId ? { documentId } : {}),
     })
-      .select({ documentId: 1, chunkIndex: 1, text: 1, embedding: 1 })
+      .select({
+        documentId: 1,
+        chunkIndex: 1,
+        text: 1,
+        embedding: 1,
+        sourcePath: 1,
+      })
       .lean();
 
     return candidates
@@ -182,6 +234,7 @@ ${question}
         chunkIndex: candidate.chunkIndex,
         text: candidate.text,
         score: cosineSimilarity(queryVector, candidate.embedding),
+        ...(candidate.sourcePath ? { sourcePath: candidate.sourcePath } : {}),
       }))
       .filter((candidate) => candidate.score >= env.VECTOR_SEARCH_MIN_SCORE)
       .sort((left, right) => right.score - left.score)
@@ -213,6 +266,7 @@ ${question}
           documentId: 1,
           chunkIndex: 1,
           text: 1,
+          sourcePath: 1,
           score: { $meta: "vectorSearchScore" },
         },
       },

@@ -11,6 +11,7 @@ interface GithubRepoCardProps {
   onSync: (repository: GithubRepository) => void;
   onImport: (repository: GithubRepository) => void;
   onOpenChat: (repository: GithubRepository) => void;
+  onOpenPullRequests: (repository: GithubRepository) => void;
 }
 
 function formatUpdatedAt(value: string) {
@@ -55,6 +56,7 @@ export function GithubRepoCard({
   onSync,
   onImport,
   onOpenChat,
+  onOpenPullRequests,
 }: GithubRepoCardProps) {
   const kb = knowledge?.knowledgeBase;
   const actionStatus = knowledge?.actionStatus ?? "idle";
@@ -151,63 +153,73 @@ export function GithubRepoCard({
         </div>
       ) : null}
 
-      <span className="document-box__hint">
-        {repository.defaultBranch} · Updated{" "}
-        {formatUpdatedAt(repository.updatedAt)}
-        {isReady ? ` · ${kb?.chunkCount ?? 0} chunks` : ""}
-      </span>
-      {knowledge?.error || kb?.errorMessage ? (
-        <p className="github-repo-box__error">
-          {knowledge?.error || kb?.errorMessage}
-        </p>
-      ) : null}
-      <div className="github-repo-box__actions">
-        <button
-          type="button"
-          className="button button--secondary button--compact"
-          onClick={() => onViewDetails(repository)}
-        >
-          View Details
-        </button>
-        <button
-          type="button"
-          className="button button--secondary button--compact"
-          disabled={!canSync}
-          onClick={() => onSync(repository)}
-        >
-          {actionStatus === "syncing" || indexing ? "Working…" : "Sync"}
-        </button>
-        {!kb || actionStatus === "importing" ? (
+      <div className="github-repo-box__footer">
+        <span className="document-box__hint">
+          {repository.defaultBranch} · Updated{" "}
+          {formatUpdatedAt(repository.updatedAt)}
+          {isReady ? ` · ${kb?.chunkCount ?? 0} chunks` : ""}
+        </span>
+        {knowledge?.error || kb?.errorMessage ? (
+          <p className="github-repo-box__error">
+            {knowledge?.error || kb?.errorMessage}
+          </p>
+        ) : null}
+        <div className="github-repo-box__actions">
           <button
             type="button"
             className="button button--secondary button--compact"
-            disabled={!canImport}
-            onClick={() => onImport(repository)}
+            onClick={() => onViewDetails(repository)}
           >
-            {actionStatus === "importing" ? "Starting…" : "Import"}
+            View Details
           </button>
-        ) : (
           <button
             type="button"
-            className="button button--primary button--compact"
-            disabled={!isReady}
-            onClick={() => onOpenChat(repository)}
+            className="button button--secondary button--compact"
+            disabled={!canSync}
+            onClick={() => onSync(repository)}
           >
-            {indexing
-              ? progress?.hasTotals
-                ? `${progress.percent}%`
-                : "Indexing…"
-              : "Open chat"}
+            {actionStatus === "syncing" || indexing ? "Working…" : "Sync"}
           </button>
-        )}
-        <a
-          className="button button--ghost-dark button--compact"
-          href={repository.htmlUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Open on GitHub
-        </a>
+          {!kb || actionStatus === "importing" ? (
+            <button
+              type="button"
+              className="button button--secondary button--compact"
+              disabled={!canImport}
+              onClick={() => onImport(repository)}
+            >
+              {actionStatus === "importing" ? "Starting…" : "Import"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="button button--primary button--compact"
+              disabled={!isReady}
+              onClick={() => onOpenChat(repository)}
+            >
+              {indexing
+                ? progress?.hasTotals
+                  ? `${progress.percent}%`
+                  : "Indexing…"
+                : "Open chat"}
+            </button>
+          )}
+          <button
+            type="button"
+            className="button button--secondary button--compact"
+            disabled={!isReady}
+            onClick={() => onOpenPullRequests(repository)}
+          >
+            Pull requests
+          </button>
+          <a
+            className="button button--ghost-dark button--compact"
+            href={repository.htmlUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open on GitHub
+          </a>
+        </div>
       </div>
     </article>
   );
