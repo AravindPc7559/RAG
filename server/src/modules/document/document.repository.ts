@@ -10,8 +10,10 @@ export interface DocumentChunkInput {
   documentId: string;
   fileName: string;
   mimeType: string;
-  cloudinaryPublicId: string;
-  cloudinaryUrl: string;
+  cloudinaryPublicId?: string;
+  cloudinaryUrl?: string;
+  sourceType?: "upload" | "github";
+  sourcePath?: string;
   chunkIndex: number;
   embedding: number[];
   text: string;

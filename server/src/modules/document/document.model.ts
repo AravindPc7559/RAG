@@ -27,12 +27,19 @@ const documentSchema = new mongoose.Schema<IDocument>(
     },
     cloudinaryPublicId: {
       type: String,
-      required: true,
       trim: true,
     },
     cloudinaryUrl: {
       type: String,
-      required: true,
+      trim: true,
+    },
+    sourceType: {
+      type: String,
+      enum: ["upload", "github"],
+      default: "upload",
+    },
+    sourcePath: {
+      type: String,
       trim: true,
     },
     chunkIndex: {

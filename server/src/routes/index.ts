@@ -8,6 +8,8 @@ import type { DocumentRepository } from "../modules/document/document.repository
 import { createGithubModule } from "../modules/github/github.modules.js";
 import type { GithubRepository } from "../modules/github/github.repository.js";
 import { createHealthRoutes } from "../modules/health/health.routes.js";
+import { createKnowledgeModule } from "../modules/knowledge/knowledge.modules.js";
+import type { KnowledgeWorker } from "../modules/knowledge/knowledge.worker.js";
 import { createUserModule } from "../modules/users/user.module.js";
 import type { UserRepository } from "../modules/users/user.repository.js";
 
@@ -18,7 +20,10 @@ export interface ApiDependencies {
   githubRepository?: GithubRepository;
 }
 
-export function createApiRouter(dependencies: ApiDependencies = {}) {
+export function createApiRouter(dependencies: ApiDependencies = {}): {
+  router: Router;
+  knowledgeWorker: KnowledgeWorker;
+} {
   const router = Router();
   const users = createUserModule(dependencies.userRepository);
   const auth = createAuthModule(users.repository);
@@ -31,12 +36,21 @@ export function createApiRouter(dependencies: ApiDependencies = {}) {
     auth.middleware,
     dependencies.githubRepository,
   );
+  const knowledge = createKnowledgeModule(
+    auth.middleware,
+    github.service,
+    dependencies.documentRepository,
+  );
 
   router.use("/health", createHealthRoutes());
   router.use("/auth", auth.router);
   router.use("/document", document.router);
   router.use("/chat", chat.router);
   router.use("/github", github.router);
+  router.use("/knowledge", knowledge.router);
 
-  return router;
+  return {
+    router,
+    knowledgeWorker: knowledge.worker,
+  };
 }

@@ -165,6 +165,10 @@ export class GithubService {
     return this.toStatus(connection);
   }
 
+  public async getAccessTokenForUser(userId: string): Promise<string> {
+    return this.requireAccessToken(userId);
+  }
+
   private async requireAccessToken(userId: string): Promise<string> {
     const connection =
       await this.githubRepository.findByUserIdWithToken(userId);

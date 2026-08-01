@@ -5,13 +5,20 @@ import {
   fetchGithubRepositories,
   fetchGithubRepository,
   fetchGithubStatus,
+  fetchKnowledgeBases,
+  importGithubRepository,
   refreshGithubProfile,
+  syncGithubKnowledgeBase,
 } from "@/features/github/store/githubThunks";
 import type {
   GithubRepositoriesQuery,
   GithubRepository,
   GithubState,
 } from "@/features/github/types/github.types";
+import {
+  knowledgeRepoKey,
+  type KnowledgeBase,
+} from "@/features/knowledge/types/knowledge.types";
 
 export const githubInitialState: GithubState = {
   connection: null,
@@ -28,8 +35,37 @@ export const githubInitialState: GithubState = {
   hasNextPage: false,
   selectedRepository: null,
   selectedRepositoryStatus: "idle",
+  knowledgeByRepo: {},
+  knowledgeStatus: "idle",
   error: null,
 };
+
+function upsertKnowledgeBase(
+  state: GithubState,
+  knowledgeBase: KnowledgeBase,
+  actionStatus: "idle" | "importing" | "syncing" = "idle",
+) {
+  const key = knowledgeRepoKey(knowledgeBase.owner, knowledgeBase.repo);
+  state.knowledgeByRepo[key] = {
+    knowledgeBase,
+    actionStatus,
+  };
+}
+
+function setRepoActionError(
+  state: GithubState,
+  owner: string,
+  repo: string,
+  message: string,
+) {
+  const key = knowledgeRepoKey(owner, repo);
+  const current = state.knowledgeByRepo[key];
+  state.knowledgeByRepo[key] = {
+    knowledgeBase: current?.knowledgeBase ?? null,
+    actionStatus: "idle",
+    error: message,
+  };
+}
 
 const githubSlice = createSlice({
   name: "github",
@@ -122,6 +158,8 @@ const githubSlice = createSlice({
         state.repositories = [];
         state.repositoriesStatus = "idle";
         state.selectedRepository = null;
+        state.knowledgeByRepo = {};
+        state.knowledgeStatus = "idle";
       })
       .addCase(disconnectGithub.rejected, (state, action) => {
         state.connectionStatus = "failed";
@@ -132,6 +170,72 @@ const githubSlice = createSlice({
       .addCase(refreshGithubProfile.fulfilled, (state, action) => {
         state.connection = action.payload;
         state.connectionStatus = "succeeded";
+      })
+      .addCase(fetchKnowledgeBases.pending, (state) => {
+        state.knowledgeStatus = "loading";
+      })
+      .addCase(fetchKnowledgeBases.fulfilled, (state, action) => {
+        state.knowledgeStatus = "succeeded";
+        const next: GithubState["knowledgeByRepo"] = {};
+        for (const knowledgeBase of action.payload) {
+          const key = knowledgeRepoKey(
+            knowledgeBase.owner,
+            knowledgeBase.repo,
+          );
+          next[key] = {
+            knowledgeBase,
+            actionStatus: "idle",
+          };
+        }
+        state.knowledgeByRepo = next;
+      })
+      .addCase(fetchKnowledgeBases.rejected, (state, action) => {
+        state.knowledgeStatus = "failed";
+        state.error = action.payload ?? {
+          message: "Unable to load knowledge bases.",
+        };
+      })
+      .addCase(importGithubRepository.pending, (state, action) => {
+        const { owner, repo } = action.meta.arg;
+        const key = knowledgeRepoKey(owner, repo);
+        const current = state.knowledgeByRepo[key];
+        state.knowledgeByRepo[key] = {
+          knowledgeBase: current?.knowledgeBase ?? null,
+          actionStatus: "importing",
+        };
+      })
+      .addCase(importGithubRepository.fulfilled, (state, action) => {
+        upsertKnowledgeBase(state, action.payload, "idle");
+      })
+      .addCase(importGithubRepository.rejected, (state, action) => {
+        const { owner, repo } = action.meta.arg;
+        setRepoActionError(
+          state,
+          owner,
+          repo,
+          action.payload?.message ?? "Unable to import repository.",
+        );
+      })
+      .addCase(syncGithubKnowledgeBase.pending, (state, action) => {
+        const { owner, repo } = action.meta.arg;
+        const key = knowledgeRepoKey(owner, repo);
+        const current = state.knowledgeByRepo[key];
+        state.knowledgeByRepo[key] = {
+          knowledgeBase: current?.knowledgeBase ?? null,
+          actionStatus: "syncing",
+        };
+      })
+      .addCase(syncGithubKnowledgeBase.fulfilled, (state, action) => {
+        upsertKnowledgeBase(state, action.payload, "idle");
+      })
+      .addCase(syncGithubKnowledgeBase.rejected, (state, action) => {
+        const { owner, repo } = action.meta.arg;
+        setRepoActionError(
+          state,
+          owner,
+          repo,
+          action.payload?.message ?? "Unable to sync repository.",
+        );
       });
   },
 });

@@ -1,3 +1,4 @@
+import type { KnowledgeRepoState } from "@/features/knowledge/types/knowledge.types";
 import type { ApiErrorPayload } from "@/services/apiErrors";
 import type { AsyncStatus } from "@/shared/types/asyncState";
 
@@ -53,5 +54,7 @@ export interface GithubState {
   hasNextPage: boolean;
   selectedRepository: GithubRepository | null;
   selectedRepositoryStatus: AsyncStatus;
+  knowledgeByRepo: Record<string, KnowledgeRepoState>;
+  knowledgeStatus: AsyncStatus;
   error: ApiErrorPayload | null;
 }

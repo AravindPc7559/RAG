@@ -22,20 +22,20 @@ interface TestUser {
   role: string;
 }
 
+function createTestApp() {
+  return createApp({ userRepository: new FakeUserRepository() }).app;
+}
+
 describe("authentication API", () => {
   it("rejects protected requests without a session cookie", async () => {
-    const response = await request(
-      createApp({ userRepository: new FakeUserRepository() }),
-    ).get("/api/v1/auth/me");
+    const response = await request(createTestApp()).get("/api/v1/auth/me");
 
     expect(response.status).toBe(401);
     expect((response.body as ErrorBody).code).toBe("UNAUTHORIZED");
   });
 
   it("registers, restores the cookie session, and returns the current user", async () => {
-    const agent = request.agent(
-      createApp({ userRepository: new FakeUserRepository() }),
-    );
+    const agent = request.agent(createTestApp());
 
     const registration = await agent.post("/api/v1/auth/register").send({
       name: "Example Member",
@@ -59,7 +59,7 @@ describe("authentication API", () => {
   });
 
   it("prevents duplicate registration", async () => {
-    const app = createApp({ userRepository: new FakeUserRepository() });
+    const app = createTestApp();
     const payload = {
       name: "Duplicate User",
       email: "duplicate@example.com",
@@ -76,9 +76,7 @@ describe("authentication API", () => {
   });
 
   it("rejects invalid registration input", async () => {
-    const response = await request(
-      createApp({ userRepository: new FakeUserRepository() }),
-    )
+    const response = await request(createTestApp())
       .post("/api/v1/auth/register")
       .send({
         name: "A",
@@ -91,9 +89,7 @@ describe("authentication API", () => {
   });
 
   it("clears the session cookie on logout", async () => {
-    const agent = request.agent(
-      createApp({ userRepository: new FakeUserRepository() }),
-    );
+    const agent = request.agent(createTestApp());
 
     await agent.post("/api/v1/auth/register").send({
       name: "Logout User",

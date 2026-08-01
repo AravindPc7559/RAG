@@ -11,8 +11,17 @@ import { logger } from "./config/logger.js";
 async function bootstrap() {
   await connectDatabase();
 
-  const server = createServer(createApp());
+  const { app, knowledgeWorker } = createApp();
+  const server = createServer(app);
   let isShuttingDown = false;
+
+  if (env.KNOWLEDGE_WORKER_ENABLED) {
+    knowledgeWorker.start();
+  } else {
+    logger.warn(
+      "Knowledge worker is disabled in this process. Run `npm run worker` separately.",
+    );
+  }
 
   const shutdown = async (signal: NodeJS.Signals) => {
     if (isShuttingDown) {
@@ -21,6 +30,7 @@ async function bootstrap() {
 
     isShuttingDown = true;
     logger.info({ signal }, "Graceful shutdown started");
+    knowledgeWorker.stop();
 
     const forceShutdownTimer = setTimeout(() => {
       logger.fatal("Graceful shutdown timed out");
@@ -63,6 +73,7 @@ async function bootstrap() {
         port: env.PORT,
         environment: env.NODE_ENV,
         apiPrefix: env.API_PREFIX,
+        knowledgeWorkerEnabled: env.KNOWLEDGE_WORKER_ENABLED,
       },
       "HTTP server started",
     );

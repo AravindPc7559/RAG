@@ -157,12 +157,96 @@ export async function fetchGithubRepository(
   return mapRepository(data);
 }
 
+interface GithubTreeItem {
+  path: string;
+  type: string;
+  sha: string;
+  size?: number;
+  url?: string;
+}
+
+interface GithubTreeResponse {
+  sha: string;
+  truncated: boolean;
+  tree: GithubTreeItem[];
+}
+
+interface GithubContentFileResponse {
+  type: string;
+  encoding?: string;
+  size: number;
+  name: string;
+  path: string;
+  content?: string;
+  sha: string;
+}
+
+export interface GithubTreeBlob {
+  path: string;
+  sha: string;
+  size: number;
+}
+
+export async function fetchRepositoryTree(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<{ truncated: boolean; blobs: GithubTreeBlob[] }> {
+  const { data } = await githubFetch<GithubTreeResponse>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+    accessToken,
+  );
+
+  const blobs = data.tree
+    .filter((item) => item.type === "blob" && item.path)
+    .map((item) => ({
+      path: item.path,
+      sha: item.sha,
+      size: item.size ?? 0,
+    }));
+
+  return {
+    truncated: Boolean(data.truncated),
+    blobs,
+  };
+}
+
+export async function fetchFileContent(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string,
+): Promise<string | null> {
+  const { data } = await githubFetch<GithubContentFileResponse>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${path
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/")}?ref=${encodeURIComponent(ref)}`,
+    accessToken,
+  );
+
+  if (data.type !== "file" || !data.content || data.encoding !== "base64") {
+    return null;
+  }
+
+  try {
+    const decoded = Buffer.from(data.content.replace(/\n/g, ""), "base64");
+    if (decoded.includes(0)) {
+      return null;
+    }
+    return decoded.toString("utf8");
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Extension points for future features (contents, branches, PRs, etc.).
+ * Extension points for future features (branches, PRs, issues, etc.).
  * Keep GitHub REST calls centralized here as those features land.
  */
 export const githubApiExtensions = {
-  // contents: (token, owner, repo, path) => ...
   // branches: (token, owner, repo) => ...
   // commits: (token, owner, repo) => ...
   // pullRequests: (token, owner, repo) => ...

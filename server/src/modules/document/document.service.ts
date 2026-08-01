@@ -44,6 +44,7 @@ export class DocumentService {
           mimeType: document.mimetype,
           cloudinaryPublicId: storedDocument.publicId,
           cloudinaryUrl: storedDocument.secureUrl,
+          sourceType: "upload",
           chunkIndex,
           embedding,
           text,

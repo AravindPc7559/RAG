@@ -25,3 +25,9 @@ export const selectGithubError = (state: RootState) => state.github.error;
 
 export const selectGithubHasNextPage = (state: RootState) =>
   state.github.hasNextPage;
+
+export const selectKnowledgeByRepo = (state: RootState) =>
+  state.github.knowledgeByRepo;
+
+export const selectKnowledgeStatus = (state: RootState) =>
+  state.github.knowledgeStatus;

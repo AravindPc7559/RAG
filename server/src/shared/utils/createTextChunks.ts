@@ -18,7 +18,17 @@ export async function createTextChunks(
   options: CreateTextChunksOptions = {},
 ): Promise<string[]> {
   const text = await extractText(file);
-  return splitIntoChunks(text, options);
+  return chunkText(text, options);
+}
+
+/**
+ * Splits already-extracted text into overlapping chunks suitable for embedding.
+ */
+export function chunkText(
+  text: string,
+  options: CreateTextChunksOptions = {},
+): string[] {
+  return splitIntoChunks(normalizeText(text), options);
 }
 
 async function extractText(file: Express.Multer.File): Promise<string> {

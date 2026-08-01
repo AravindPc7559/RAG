@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
-import { useAppDispatch } from "@/app/store/hooks";
+import { createChatPath } from "@/app/router/paths";
+import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import { refreshSession } from "@/features/auth/store/authThunks";
 import { GithubConnectionHeader } from "@/features/github/components/GithubConnectionHeader";
 import { GithubEmptyState } from "@/features/github/components/GithubEmptyState";
@@ -11,16 +12,28 @@ import { GithubRepoSkeleton } from "@/features/github/components/GithubRepoSkele
 import { useGithubConnection } from "@/features/github/hooks/useGithubConnection";
 import { useGithubRepositories } from "@/features/github/hooks/useGithubRepositories";
 import { useGithubRepository } from "@/features/github/hooks/useGithubRepository";
-import { disconnectGithub } from "@/features/github/store/githubThunks";
+import { selectKnowledgeByRepo } from "@/features/github/store/githubSelectors";
+import {
+  disconnectGithub,
+  fetchKnowledgeBases,
+  importGithubRepository,
+  syncGithubKnowledgeBase,
+} from "@/features/github/store/githubThunks";
 import type { GithubRepository } from "@/features/github/types/github.types";
+import {
+  isKnowledgeIndexing,
+  knowledgeRepoKey,
+} from "@/features/knowledge/types/knowledge.types";
 import { useToast } from "@/shared/hooks/useToast";
 
 export function GitHubPage() {
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const { showToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const oauthHandledRef = useRef(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const knowledgeByRepo = useAppSelector(selectKnowledgeByRepo);
 
   const {
     connection,
@@ -59,7 +72,54 @@ export function GitHubPage() {
     }
 
     void loadRepositories({ page: 1 });
-  }, [isConnected, loadRepositories]);
+    void dispatch(fetchKnowledgeBases());
+  }, [dispatch, isConnected, loadRepositories]);
+
+  const hasIndexingKnowledge = Object.values(knowledgeByRepo).some((entry) =>
+    isKnowledgeIndexing(entry.knowledgeBase),
+  );
+  const indexingSnapshotRef = useRef<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (!isConnected || !hasIndexingKnowledge) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      void dispatch(fetchKnowledgeBases());
+    }, 1500);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [dispatch, hasIndexingKnowledge, isConnected]);
+
+  useEffect(() => {
+    const previous = indexingSnapshotRef.current;
+    const next: Record<string, boolean> = {};
+
+    for (const [key, entry] of Object.entries(knowledgeByRepo)) {
+      const kb = entry.knowledgeBase;
+      const indexing = isKnowledgeIndexing(kb);
+      next[key] = indexing;
+
+      if (previous[key] && !indexing && kb) {
+        if (kb.status === "ready") {
+          showToast(
+            `${kb.fullName} is ready. You can open chat now.`,
+            "success",
+          );
+        } else if (kb.status === "failed") {
+          showToast(
+            kb.errorMessage || `${kb.fullName} indexing failed.`,
+            "error",
+          );
+        }
+      }
+    }
+
+    indexingSnapshotRef.current = next;
+  }, [knowledgeByRepo, showToast]);
 
   useEffect(() => {
     const githubResult = searchParams.get("github");
@@ -77,6 +137,7 @@ export function GitHubPage() {
       if (githubResult === "connected") {
         showToast("GitHub connected successfully.", "success");
         await loadRepositories({ page: 1 });
+        await dispatch(fetchKnowledgeBases());
       } else if (githubResult === "error") {
         showToast(message || "GitHub connection failed.", "error");
       }
@@ -112,15 +173,76 @@ export function GitHubPage() {
     await loadRepository(repository.owner, repository.name);
   }
 
-  async function handleSync() {
-    const result = await syncRepositories();
-    if (result.meta.requestStatus === "fulfilled") {
-      showToast("Repositories synced.", "success");
+  async function handleImport(repository: GithubRepository) {
+    const result = await dispatch(
+      importGithubRepository({
+        owner: repository.owner,
+        repo: repository.name,
+      }),
+    );
+
+    if (importGithubRepository.fulfilled.match(result)) {
+      showToast(
+        `${repository.fullName} import started. Indexing in the background…`,
+        "info",
+      );
+      return;
     }
+
+    showToast(
+      result.payload?.message || `Failed to import ${repository.fullName}.`,
+      "error",
+    );
   }
 
-  function handleImport(repository: GithubRepository) {
-    showToast(`Import for ${repository.name} is coming soon.`, "info");
+  async function handleSyncKnowledge(repository: GithubRepository) {
+    const result = await dispatch(
+      syncGithubKnowledgeBase({
+        owner: repository.owner,
+        repo: repository.name,
+      }),
+    );
+
+    if (syncGithubKnowledgeBase.fulfilled.match(result)) {
+      showToast(
+        `${repository.fullName} sync started. Indexing in the background…`,
+        "info",
+      );
+      return;
+    }
+
+    showToast(
+      result.payload?.message || `Failed to sync ${repository.fullName}.`,
+      "error",
+    );
+  }
+
+  function handleOpenChat(repository: GithubRepository) {
+    const key = knowledgeRepoKey(repository.owner, repository.name);
+    const knowledge = knowledgeByRepo[key]?.knowledgeBase;
+
+    if (!knowledge?.knowledgeBaseId) {
+      showToast("Import this repository before opening chat.", "error");
+      return;
+    }
+
+    if (isKnowledgeIndexing(knowledge)) {
+      showToast("Knowledge base is still indexing. Try again shortly.", "info");
+      return;
+    }
+
+    if (knowledge.status !== "ready") {
+      showToast(
+        knowledge.errorMessage ||
+          "Knowledge base is not ready yet. Try Sync or Import again.",
+        "error",
+      );
+      return;
+    }
+
+    navigate(createChatPath(knowledge.knowledgeBaseId), {
+      state: { documentName: repository.fullName },
+    });
   }
 
   const pageError =
@@ -138,15 +260,24 @@ export function GitHubPage() {
           <h1>GitHub</h1>
           <p>
             {isConnected
-              ? "Browse and manage repositories from your connected GitHub account."
+              ? "Import a repository to build a knowledge base, then ask questions about its code."
               : "Connect your GitHub account to import repositories and enable AI-powered code analysis."}
           </p>
         </div>
         {isConnected ? (
-          <span className="document-library__count">
-            {repositories.length}{" "}
-            {repositories.length === 1 ? "repository" : "repositories"}
-          </span>
+          <div className="github-page__heading-actions">
+            <button
+              type="button"
+              className="button button--secondary button--compact"
+              onClick={() => void syncRepositories()}
+            >
+              Refresh list
+            </button>
+            <span className="document-library__count">
+              {repositories.length}{" "}
+              {repositories.length === 1 ? "repository" : "repositories"}
+            </span>
+          </div>
         ) : null}
       </header>
 
@@ -214,15 +345,23 @@ export function GitHubPage() {
 
           {repositories.length > 0 ? (
             <div className="documents-page__grid github-page__grid">
-              {repositories.map((repository) => (
-                <GithubRepoCard
-                  key={repository.id}
-                  repository={repository}
-                  onViewDetails={(repo) => void handleViewDetails(repo)}
-                  onSync={() => void handleSync()}
-                  onImport={handleImport}
-                />
-              ))}
+              {repositories.map((repository) => {
+                const key = knowledgeRepoKey(
+                  repository.owner,
+                  repository.name,
+                );
+                return (
+                  <GithubRepoCard
+                    key={repository.id}
+                    repository={repository}
+                    knowledge={knowledgeByRepo[key]}
+                    onViewDetails={(repo) => void handleViewDetails(repo)}
+                    onSync={(repo) => void handleSyncKnowledge(repo)}
+                    onImport={(repo) => void handleImport(repo)}
+                    onOpenChat={handleOpenChat}
+                  />
+                );
+              })}
             </div>
           ) : null}
         </>

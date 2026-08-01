@@ -9,14 +9,19 @@ import { pinoHttp } from "pino-http";
 
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
+import type { KnowledgeWorker } from "./modules/knowledge/knowledge.worker.js";
 import { createApiRouter, type ApiDependencies } from "./routes/index.js";
 import { errorHandler } from "./shared/middleware/errorHandler.js";
 import { notFoundHandler } from "./shared/middleware/notFoundHandler.js";
 import { AppError } from "./shared/errors/AppError.js";
 import { sendResponse } from "./shared/utils/sendResponse.js";
 
-export function createApp(dependencies: ApiDependencies = {}) {
+export function createApp(dependencies: ApiDependencies = {}): {
+  app: express.Express;
+  knowledgeWorker: KnowledgeWorker;
+} {
   const app = express();
+  const api = createApiRouter(dependencies);
 
   if (env.TRUST_PROXY) {
     app.set("trust proxy", 1);
@@ -69,10 +74,13 @@ export function createApp(dependencies: ApiDependencies = {}) {
       apiPrefix: env.API_PREFIX,
     }),
   );
-  app.use(env.API_PREFIX, createApiRouter(dependencies));
+  app.use(env.API_PREFIX, api.router);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
 
-  return app;
+  return {
+    app,
+    knowledgeWorker: api.knowledgeWorker,
+  };
 }

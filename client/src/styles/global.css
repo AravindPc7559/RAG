@@ -990,6 +990,102 @@ a:focus-visible {
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
 }
 
+.github-page__heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.github-repo-box__error {
+  margin: 0;
+  max-width: 100%;
+  color: var(--danger);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.github-repo-box__progress-panel {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid #d7e0cb;
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(244, 249, 232, 0.9);
+  text-align: left;
+}
+
+.github-repo-box__progress-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.github-repo-box__progress-header strong {
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #2f3f28;
+}
+
+.github-repo-box__progress-header span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.github-repo-box__progress {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e7eddf;
+}
+
+.github-repo-box__progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #8fb12f, #c3e24a);
+  transition: width 280ms ease;
+}
+
+.github-repo-box__progress-bar--indeterminate {
+  width: 36%;
+  animation: github-progress-indeterminate 1.1s ease-in-out infinite;
+}
+
+.github-repo-box__progress-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.github-repo-box__progress-stats span {
+  display: grid;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.github-repo-box__progress-stats strong {
+  color: var(--ink);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+@keyframes github-progress-indeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
 .github-repo-box {
   min-height: 280px;
   cursor: default;

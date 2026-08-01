@@ -351,7 +351,7 @@ export default function DocumentChat() {
                       <span />
                       <span />
                       <span />
-                      <small>Searching your document</small>
+                      <small>Cooking your answer...</small>
                     </div>
                   ) : (
                     <p>{exchange.answer}</p>

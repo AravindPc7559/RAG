@@ -87,6 +87,16 @@ const envSchema = z.object({
   GITHUB_CLIENT_SECRET: optionalString,
   GITHUB_CALLBACK_URL: optionalString,
   GITHUB_WEBHOOK_SECRET: optionalString,
+  KNOWLEDGE_WORKER_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  KNOWLEDGE_WORKER_POLL_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(60_000)
+    .default(2_000),
 });
 
 const result = envSchema.safeParse(process.env);
