@@ -39,7 +39,7 @@ const envSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .default("mongodb://127.0.0.1:27017/rag"),
+    .default("mongodb://127.0.0.1:27017/sourcesense"),
   CLOUDINARY_CLOUD_NAME: optionalString,
   CLOUDINARY_API_KEY: optionalString,
   CLOUDINARY_API_SECRET: optionalString,
@@ -64,7 +64,7 @@ const envSchema = z.object({
     .min(32)
     .default("development-only-secret-change-this-value"),
   JWT_EXPIRES_IN: z.string().trim().min(1).default("7d"),
-  JWT_COOKIE_NAME: z.string().trim().min(1).default("rag_session"),
+  JWT_COOKIE_NAME: z.string().trim().min(1).default("sourcesense_session"),
   JWT_COOKIE_MAX_AGE_MS: z.coerce
     .number()
     .int()

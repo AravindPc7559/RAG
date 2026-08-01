@@ -75,7 +75,7 @@ export function AuthForm({ mode }: AuthFormProps) {
   return (
     <form className="auth-card" onSubmit={handleSubmit} noValidate>
       <div className="auth-card__heading">
-        <span className="eyebrow">RAG workspace</span>
+        <span className="eyebrow">SourceSense workspace</span>
         <h1>{isRegister ? "Create your account" : "Welcome back"}</h1>
         <p>
           {isRegister

@@ -31,7 +31,7 @@ export function uploadDocumentToCloudinary(
       {
         resource_type: "raw",
         type: "authenticated",
-        folder: `rag/documents/${userId}`,
+        folder: `sourcesense/documents/${userId}`,
         public_id: randomUUID(),
         overwrite: false,
       },

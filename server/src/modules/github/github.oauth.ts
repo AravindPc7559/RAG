@@ -112,7 +112,7 @@ export async function exchangeCodeForToken(
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
-      "User-Agent": "rag-workspace",
+      "User-Agent": "sourcesense",
     },
     body: JSON.stringify({
       client_id: env.GITHUB_CLIENT_ID,

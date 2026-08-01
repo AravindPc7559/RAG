@@ -4,12 +4,12 @@ export function RegisterPage() {
   return (
     <main className="auth-page">
       <section className="auth-page__intro">
-        <span className="brand-mark">R</span>
-        <p className="eyebrow">Build with confidence</p>
-        <h2>A frontend foundation your team can extend.</h2>
+        <span className="brand-mark">S</span>
+        <p className="eyebrow">SourceSense</p>
+        <h2>Create your SourceSense workspace.</h2>
         <p>
-          Each business capability owns its UI, API calls, Redux state, async
-          thunks, selectors, and types.
+          Upload documents, connect GitHub, and turn your sources into answers
+          your team can trust.
         </p>
       </section>
       <AuthForm mode="register" />

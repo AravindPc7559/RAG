@@ -1,4 +1,4 @@
-# RAG Client
+# SourceSense Client
 
 A scalable React 18 + Vite + TypeScript application organized by business
 feature. Redux Toolkit owns global client state, `createAsyncThunk` orchestrates

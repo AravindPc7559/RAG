@@ -20,7 +20,7 @@ async function githubFetch<T>(
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${accessToken}`,
       "X-GitHub-Api-Version": GITHUB_API_VERSION,
-      "User-Agent": "rag-workspace",
+      "User-Agent": "sourcesense",
       ...(init?.headers ?? {}),
     },
   });

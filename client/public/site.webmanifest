@@ -1,0 +1,15 @@
+{
+  "name": "SourceSense",
+  "short_name": "SourceSense",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "theme_color": "#d9ff4f",
+  "background_color": "#f3f5f0",
+  "display": "standalone"
+}

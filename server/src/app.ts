@@ -70,7 +70,7 @@ export function createApp(dependencies: ApiDependencies = {}): {
 
   app.get("/", (_request, response) =>
     sendResponse(response, 200, {
-      service: "rag-server",
+      service: "sourcesense-server",
       apiPrefix: env.API_PREFIX,
     }),
   );

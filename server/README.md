@@ -1,4 +1,4 @@
-# RAG Server
+# SourceSense Server
 
 An Express 5 + TypeScript modular monolith using MongoDB, HTTP-only JWT
 cookies, request validation, structured logging, role authorization, and
@@ -27,7 +27,7 @@ npm run dev
 
 The API starts at `http://127.0.0.1:4000/api/v1`.
 The default MongoDB connection is
-`mongodb://127.0.0.1:27017/rag`, which works with a normal local MongoDB
+`mongodb://127.0.0.1:27017/sourcesense`, which works with a normal local MongoDB
 installation and MongoDB Compass.
 
 The public registry flag is required in this workspace because its configured
@@ -49,7 +49,7 @@ Set `ADMIN_NAME`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD` before running
 `seed:admin`. If the email already exists, the account is promoted to an active
 administrator without changing its password.
 
-## Document RAG configuration
+## Document and knowledge configuration
 
 Set `OPENAI_API_KEY` in `.env` before uploading a document. The server uses
 `text-embedding-3-small` by default and stores one embedding per text chunk.
@@ -58,7 +58,7 @@ Supported uploads are PDF, TXT, Markdown, and CSV.
 For a normal MongoDB installation on port `27017`, keep:
 
 ```dotenv
-MONGODB_URI=mongodb://127.0.0.1:27017/rag
+MONGODB_URI=mongodb://127.0.0.1:27017/sourcesense
 VECTOR_SEARCH_MODE=local
 ```
 
@@ -211,7 +211,7 @@ accounts lose access immediately.
 - Request IDs and Pino JSON logs support distributed observability.
 - Rate limits use in-process storage locally. Replace the default store with a
   shared Redis-compatible store before running multiple API instances.
-- Move email, file processing, AI/RAG indexing, and other slow operations into
+- Move email, file processing, knowledge indexing, and other slow operations into
   independently scalable queue workers.
 - Extract a module into a separate service only when it needs independent
   deployment, ownership, scaling, or failure isolation.

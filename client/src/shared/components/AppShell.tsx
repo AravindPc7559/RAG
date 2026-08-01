@@ -23,9 +23,9 @@ export function AppShell() {
     <div className="app-layout">
       <aside className="sidebar">
         <div className="sidebar__brand">
-          <span className="brand-mark brand-mark--small">R</span>
+          <span className="brand-mark brand-mark--small">S</span>
           <div>
-            <strong>RAG</strong>
+            <strong>SourceSense</strong>
             <span>Workspace</span>
           </div>
         </div>

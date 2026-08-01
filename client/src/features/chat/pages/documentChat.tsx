@@ -246,7 +246,7 @@ export default function DocumentChat() {
     <main className="chat-page">
       <header className="chat-header">
         <div className="chat-header__brand">
-          <span className="brand-mark brand-mark--small">R</span>
+          <span className="brand-mark brand-mark--small">S</span>
           <div>
             <span className="eyebrow">Document conversation</span>
             <strong>Ask your document</strong>
