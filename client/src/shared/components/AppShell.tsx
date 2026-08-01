@@ -10,6 +10,7 @@ import {
 
 const navigation = [
   { label: "Overview", to: paths.dashboard, end: true },
+  { label: "Document", to: paths.documents, end: false },
   { label: "Users", to: paths.users, end: false },
 ];
 

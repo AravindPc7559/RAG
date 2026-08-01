@@ -27,32 +27,4 @@ export class DocumentController {
 
     response.status(400).json({ message: "Failed to upload document" });
   };
-
-  public askDocument: RequestHandler = async (request, response) => {
-    const { question } = request.body as {
-      question?: string;
-    };
-    const documentIdParam = request.params.documentId;
-    const documentId =
-      typeof documentIdParam === "string" ? documentIdParam.trim() : "";
-    const userId = request.user?.id;
-
-    if (!question?.trim() || !documentId || !userId) {
-      response
-        .status(400)
-        .json({ message: "No question, document id, or user id provided" });
-      return;
-    }
-
-    const answer = await this.documentService.askDocument(
-      question.trim(),
-      userId,
-      documentId,
-    );
-
-    response.status(200).json({
-      message: "Document asked successfully",
-      ...(answer ? { answer } : {}),
-    });
-  };
 }

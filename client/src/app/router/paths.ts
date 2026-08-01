@@ -1,6 +1,7 @@
 export const paths = {
   dashboard: "/",
   chat: "/chat/:documentId",
+  documents: "/documents",
   login: "/login",
   register: "/register",
   users: "/users",

@@ -46,10 +46,5 @@ export function createDocumentRoutes(
     asyncHandler(controller.uploadDocument),
   );
 
-  router.post(
-    "/ask_document/:documentId",
-    asyncHandler(controller.askDocument),
-  );
-
   return router;
 }

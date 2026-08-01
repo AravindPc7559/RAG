@@ -27,6 +27,11 @@ const RegisterPage = lazy(() =>
     default: module.RegisterPage,
   })),
 );
+const DocumentsPage = lazy(() =>
+  import("@/features/documents").then((module) => ({
+    default: module.DocumentsPage,
+  })),
+);
 const UsersPage = lazy(() =>
   import("@/features/users").then((module) => ({
     default: module.UsersPage,
@@ -51,6 +56,7 @@ export function AppRouter() {
           <Route element={<AppShell />}> 
             <Route index element={<DashboardPage />} />
             <Route path={paths.chat} element={<DocumentChat />} />
+            <Route path={paths.documents} element={<DocumentsPage />} />
             <Route path={paths.users} element={<UsersPage />} />
            </Route>
         </Route>

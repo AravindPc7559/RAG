@@ -39,7 +39,7 @@ export function uploadDocumentToCloudinary(
         if (error) {
           reject(
             AppError.serviceUnavailable(
-              "Unable to store the document in Cloudinary.",
+              cloudinaryUploadErrorMessage(error),
               error,
             ),
           );
@@ -124,4 +124,24 @@ function readDeletionResult(result: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function cloudinaryUploadErrorMessage(error: unknown) {
+  const message =
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+      ? error.message
+      : "";
+
+  if (message.toLowerCase().includes("missing permissions")) {
+    return "Cloudinary API key is missing upload permissions (create). Use an unrestricted key or enable create access in the Cloudinary dashboard.";
+  }
+
+  if (message) {
+    return `Unable to store the document in Cloudinary: ${message}`;
+  }
+
+  return "Unable to store the document in Cloudinary.";
 }

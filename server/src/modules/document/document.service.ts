@@ -91,16 +91,4 @@ export class DocumentService {
       throw error;
     }
   }
-
-  public async askDocument(
-    question: string,
-    userId: string,
-    documentId?: string,
-  ): Promise<string | null> {
-    return this.documentRepository.askDocument(
-      question,
-      userId,
-      documentId,
-    );
-  }
 }

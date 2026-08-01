@@ -198,7 +198,7 @@ GET  /api/v1/auth/me
 POST /api/v1/auth/logout
 
 POST /api/v1/document/upload_document
-POST /api/v1/document/ask_document
+POST /api/v1/chat/ask_document/:documentId
 
 GET    /api/v1/users
 GET    /api/v1/users/:id

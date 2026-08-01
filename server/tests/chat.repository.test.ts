@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   cosineSimilarity,
   mergeSearchResults,
-} from "../src/modules/document/document.repository.js";
+} from "../src/modules/chat/chat.repository.js";
 
 describe("cosineSimilarity", () => {
   it("returns one for vectors pointing in the same direction", () => {
