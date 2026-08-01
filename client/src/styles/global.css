@@ -499,6 +499,16 @@ a:focus-visible {
   padding: clamp(32px, 5vw, 72px) clamp(24px, 4vw, 58px);
 }
 
+.page-content-loader {
+  display: flex;
+  min-height: 240px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--muted);
+}
+
 .page-heading {
   display: flex;
   align-items: end;

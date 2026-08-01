@@ -8,7 +8,7 @@ import { ToastProvider } from "@/shared/components/ToastProvider";
 export function AppProviders({ children }: PropsWithChildren) {
   return (
     <Provider store={store}>
-      <BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true }}>
         <ToastProvider>{children}</ToastProvider>
       </BrowserRouter>
     </Provider>

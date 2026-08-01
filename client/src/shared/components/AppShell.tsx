@@ -1,23 +1,48 @@
+import { Suspense, useEffect } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 
 import { paths } from "@/app/router/paths";
+import {
+  prefetchAppShellRoutes,
+  prefetchRoute,
+} from "@/app/router/routeModules";
 import { useAppDispatch, useAppSelector } from "@/app/store/hooks";
 import {
   logoutUser,
   selectAuthIsLoading,
   selectCurrentUser,
 } from "@/features/auth";
+import { PageContentLoader } from "@/shared/components/PageContentLoader";
 
 const navigation = [
-  { label: "Overview", to: paths.dashboard, end: true },
-  { label: "Document", to: paths.documents, end: false },
-  { label: "GitHub", to: paths.github, end: false },
+  {
+    label: "Overview",
+    to: paths.dashboard,
+    end: true,
+    prefetch: "dashboard" as const,
+  },
+  {
+    label: "Document",
+    to: paths.documents,
+    end: false,
+    prefetch: "documents" as const,
+  },
+  {
+    label: "GitHub",
+    to: paths.github,
+    end: false,
+    prefetch: "github" as const,
+  },
 ];
 
 export function AppShell() {
   const dispatch = useAppDispatch();
   const currentUser = useAppSelector(selectCurrentUser);
   const isAuthLoading = useAppSelector(selectAuthIsLoading);
+
+  useEffect(() => {
+    prefetchAppShellRoutes();
+  }, []);
 
   return (
     <div className="app-layout">
@@ -39,6 +64,8 @@ export function AppShell() {
               className={({ isActive }) =>
                 isActive ? "nav-link nav-link--active" : "nav-link"
               }
+              onMouseEnter={() => prefetchRoute(item.prefetch)}
+              onFocus={() => prefetchRoute(item.prefetch)}
             >
               <span className="nav-link__dot" aria-hidden="true" />
               {item.label}
@@ -77,7 +104,9 @@ export function AppShell() {
           </div>
         </header>
         <main className="workspace__content">
-          <Outlet />
+          <Suspense fallback={<PageContentLoader label="Loading page" />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>
