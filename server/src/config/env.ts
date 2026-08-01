@@ -77,6 +77,16 @@ const envSchema = z.object({
     .default(15 * 60 * 1000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
+  FRONTEND_URL: z
+    .string()
+    .trim()
+    .url()
+    .default("http://127.0.0.1:5173"),
+  TOKEN_ENCRYPTION_KEY: optionalString,
+  GITHUB_CLIENT_ID: optionalString,
+  GITHUB_CLIENT_SECRET: optionalString,
+  GITHUB_CALLBACK_URL: optionalString,
+  GITHUB_WEBHOOK_SECRET: optionalString,
 });
 
 const result = envSchema.safeParse(process.env);

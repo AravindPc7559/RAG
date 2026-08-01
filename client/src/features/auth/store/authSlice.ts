@@ -3,6 +3,7 @@ import { createSlice } from "@reduxjs/toolkit";
 import {
   loginUser,
   logoutUser,
+  refreshSession,
   registerUser,
   restoreSession,
 } from "@/features/auth/store/authThunks";
@@ -84,6 +85,11 @@ const authSlice = createSlice({
         state.error = action.payload ?? {
           message: "Unable to create the account.",
         };
+      })
+      .addCase(refreshSession.fulfilled, (state, action) => {
+        state.user = action.payload;
+        state.status = "succeeded";
+        state.initialized = true;
       })
       .addCase(logoutUser.pending, (state) => {
         state.status = "loading";

@@ -5,6 +5,8 @@ import { createChatModule } from "../modules/chat/chat.modules.js";
 import type { ChatRepository } from "../modules/chat/chat.repository.js";
 import { createDocumentModule } from "../modules/document/document.modules.js";
 import type { DocumentRepository } from "../modules/document/document.repository.js";
+import { createGithubModule } from "../modules/github/github.modules.js";
+import type { GithubRepository } from "../modules/github/github.repository.js";
 import { createHealthRoutes } from "../modules/health/health.routes.js";
 import { createUserModule } from "../modules/users/user.module.js";
 import type { UserRepository } from "../modules/users/user.repository.js";
@@ -13,6 +15,7 @@ export interface ApiDependencies {
   userRepository?: UserRepository;
   documentRepository?: DocumentRepository;
   chatRepository?: ChatRepository;
+  githubRepository?: GithubRepository;
 }
 
 export function createApiRouter(dependencies: ApiDependencies = {}) {
@@ -24,11 +27,16 @@ export function createApiRouter(dependencies: ApiDependencies = {}) {
     dependencies.documentRepository,
   );
   const chat = createChatModule(auth.middleware, dependencies.chatRepository);
+  const github = createGithubModule(
+    auth.middleware,
+    dependencies.githubRepository,
+  );
 
   router.use("/health", createHealthRoutes());
   router.use("/auth", auth.router);
   router.use("/document", document.router);
   router.use("/chat", chat.router);
+  router.use("/github", github.router);
 
   return router;
 }

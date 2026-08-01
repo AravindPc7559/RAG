@@ -29,6 +29,14 @@ export class AppError extends Error {
     return new AppError(409, "CONFLICT", message, details);
   }
 
+  public static tooManyRequests(message = "Too many requests. Please try again later.") {
+    return new AppError(429, "TOO_MANY_REQUESTS", message);
+  }
+
+  public static badGateway(message: string, details?: unknown) {
+    return new AppError(502, "BAD_GATEWAY", message, details);
+  }
+
   public static serviceUnavailable(message: string, details?: unknown) {
     return new AppError(503, "SERVICE_UNAVAILABLE", message, details);
   }

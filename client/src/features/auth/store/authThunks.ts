@@ -61,6 +61,18 @@ export const restoreSession = createAsyncThunk<
   },
 );
 
+export const refreshSession = createAsyncThunk<
+  AuthUser,
+  void,
+  AuthThunkConfig
+>("auth/refreshSession", async (_, { rejectWithValue, signal }) => {
+  try {
+    return await authService.getCurrentUser({ signal });
+  } catch (error) {
+    return rejectWithValue(toApiErrorPayload(error));
+  }
+});
+
 export const logoutUser = createAsyncThunk<void, void, AuthThunkConfig>(
   "auth/logout",
   async (_, { rejectWithValue, signal }) => {

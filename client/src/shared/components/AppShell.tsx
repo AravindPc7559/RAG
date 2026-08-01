@@ -11,6 +11,7 @@ import {
 const navigation = [
   { label: "Overview", to: paths.dashboard, end: true },
   { label: "Document", to: paths.documents, end: false },
+  { label: "GitHub", to: paths.github, end: false },
 ];
 
 export function AppShell() {

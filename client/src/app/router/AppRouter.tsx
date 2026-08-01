@@ -32,6 +32,11 @@ const DocumentsPage = lazy(() =>
     default: module.DocumentsPage,
   })),
 );
+const GitHubPage = lazy(() =>
+  import("@/features/github").then((module) => ({
+    default: module.GitHubPage,
+  })),
+);
 const NotFoundPage = lazy(() =>
   import("@/features/not-found").then((module) => ({
     default: module.NotFoundPage,
@@ -52,6 +57,7 @@ export function AppRouter() {
             <Route index element={<DashboardPage />} />
             <Route path={paths.chat} element={<DocumentChat />} />
             <Route path={paths.documents} element={<DocumentsPage />} />
+            <Route path={paths.github} element={<GitHubPage />} />
           </Route>
         </Route>
 
