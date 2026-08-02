@@ -5,7 +5,7 @@ import { env } from "../../config/env.js";
 function baseCookieOptions(): CookieOptions {
   return {
     httpOnly: true,
-    secure: env.NODE_ENV === "production",
+    secure: env.JWT_COOKIE_SECURE,
     sameSite: "lax",
     path: "/",
   };

@@ -70,6 +70,20 @@ const envSchema = z.object({
     .int()
     .positive()
     .default(7 * 24 * 60 * 60 * 1000),
+  // Override cookie Secure flag. Defaults to true in production, false otherwise.
+  // Set "false" for local Docker over plain HTTP.
+  JWT_COOKIE_SECURE: z.preprocess(
+    (value) =>
+      typeof value === "string" && value.trim() === "" ? undefined : value,
+    z
+      .enum(["true", "false"])
+      .optional()
+      .transform((value) => {
+        if (value === "true") return true;
+        if (value === "false") return false;
+        return process.env.NODE_ENV === "production";
+      }),
+  ),
   RATE_LIMIT_WINDOW_MS: z.coerce
     .number()
     .int()
