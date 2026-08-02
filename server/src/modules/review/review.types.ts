@@ -185,3 +185,76 @@ export interface UpdateAutoReviewInput {
   enabled: boolean;
   targetBranch: string;
 }
+
+export interface ListPullRequestsQuery {
+  state?: "open" | "closed" | "all";
+  page?: number;
+  perPage?: number;
+}
+
+export interface PublishReviewInput {
+  body?: string;
+  comments: PublishReviewCommentInput[];
+}
+
+export interface UpsertAutoReviewConfigInput {
+  userId: string;
+  knowledgeBaseId: string;
+  githubRepoId: string;
+  owner: string;
+  repo: string;
+  enabled: boolean;
+  targetBranch: string;
+  webhookId?: number | null;
+  webhookActive: boolean;
+}
+
+export interface EnqueueReviewJobInput {
+  userId: string;
+  knowledgeBaseId: string;
+  owner: string;
+  repo: string;
+  prNumber: number;
+  headSha: string;
+  deliveryId?: string;
+  action: string;
+}
+
+export interface GenerateReviewCommentsInput {
+  title: string;
+  body: string | null;
+  files: Array<{ filename: string; patch: string; context: string }>;
+}
+
+export interface ParsedPullRequestWebhook {
+  action: string;
+  prNumber: number;
+  headSha: string;
+  baseRef: string;
+  githubRepoId: string;
+  owner: string;
+  repo: string;
+  isDraft: boolean;
+}
+
+export interface ProcessAutoReviewJobInput {
+  jobId: string;
+  userId: string;
+  owner: string;
+  repo: string;
+  prNumber: number;
+}
+
+export interface HandleGithubWebhookInput {
+  rawBody: Buffer;
+  signatureHeader?: string;
+  eventName?: string;
+  deliveryId?: string;
+}
+
+export interface AnalyzeFileContext {
+  filename: string;
+  patch: string;
+  validLines: Set<number>;
+  context: string;
+}

@@ -1,4 +1,5 @@
 import { MAX_COMMENTS } from "./review.constants.js";
+import type { GenerateReviewCommentsInput } from "./review.types.js";
 
 export function buildReviewSystemPrompt(): string {
   return `You are a senior code reviewer for SourceSense.
@@ -16,11 +17,9 @@ Rules:
 - Output JSON only, no markdown fences.`;
 }
 
-export function buildReviewUserPrompt(input: {
-  title: string;
-  body: string | null;
-  files: Array<{ filename: string; patch: string; context: string }>;
-}): string {
+export function buildReviewUserPrompt(
+  input: GenerateReviewCommentsInput,
+): string {
   const fileBlocks = input.files
     .map(
       (file) => `

@@ -1,5 +1,3 @@
-import OpenAI from "openai";
-
 import { env } from "../../config/env.js";
 import { logger } from "../../config/logger.js";
 import { AppError } from "../../shared/errors/AppError.js";
@@ -7,26 +5,28 @@ import type { AutoReviewConfigRepository } from "./review.auto-config.repository
 import {
   AUTO_REVIEW_SUMMARY,
   DEFAULT_REVIEW_SUMMARY,
-  MAX_CHANGED_FILES,
-  MAX_COMMENTS,
   MAX_CONTEXT_CHUNKS_PER_FILE,
   MAX_PATCH_CHARS,
-  PATCH_PREVIEW_CHARS,
-  REVIEW_LLM_MODEL,
 } from "./review.constants.js";
 import type { ReviewJobRepository } from "./review.job.repository.js";
-import { extractRightSideLines, truncatePatch } from "./review.patch.js";
+import { ReviewLlmClient } from "./review.llm.js";
 import {
-  buildReviewSystemPrompt,
-  buildReviewUserPrompt,
-} from "./review.prompts.js";
+  toAutoReviewConfigView,
+  toGithubReviewComments,
+  toPublishCommentsFromDrafts,
+  toPullRequestFileSummaries,
+} from "./review.mappers.js";
+import { extractRightSideLines, truncatePatch } from "./review.patch.js";
 import type {
+  AnalyzeFileContext,
   AnalyzeReviewResult,
   AutoReviewConfigView,
   GithubPrPort,
+  HandleGithubWebhookInput,
   KnowledgeLookupPort,
-  LlmComment,
-  PublishReviewCommentInput,
+  ListPullRequestsQuery,
+  ProcessAutoReviewJobInput,
+  PublishReviewInput,
   PublishReviewResult,
   RetrievalPort,
   ReviewPullRequestDetail,
@@ -37,14 +37,17 @@ import {
   buildRetrievalQuery,
   formatContextChunks,
   normalizeDraftComments,
-  parseLlmCommentsJson,
   preferMatchingChunks,
-  toAutoReviewConfigView,
 } from "./review.utils.js";
+import {
+  assertPublishComments,
+  assertTargetBranch,
+  partitionAnalyzableFiles,
+} from "./review.validators.js";
 import { parsePullRequestWebhookPayload } from "./review.webhook.js";
 
 export class ReviewService {
-  private openAIClient: OpenAI | null = null;
+  private readonly llm = new ReviewLlmClient();
 
   constructor(
     private readonly github: GithubPrPort,
@@ -58,11 +61,7 @@ export class ReviewService {
     userId: string,
     owner: string,
     repo: string,
-    query: {
-      state?: "open" | "closed" | "all";
-      page?: number;
-      perPage?: number;
-    },
+    query: ListPullRequestsQuery,
   ) {
     const knowledgeBase = await this.knowledge.getReadyKnowledgeBase(
       userId,
@@ -104,19 +103,7 @@ export class ReviewService {
     return {
       pullRequest,
       knowledgeBaseId: knowledgeBase.knowledgeBaseId,
-      files: files.map((file) => ({
-        filename: file.filename,
-        status: file.status,
-        additions: file.additions,
-        deletions: file.deletions,
-        changes: file.changes,
-        hasPatch: Boolean(file.patch),
-        ...(file.patch
-          ? {
-              patchPreview: truncatePatch(file.patch, PATCH_PREVIEW_CHARS),
-            }
-          : {}),
-      })),
+      files: toPullRequestFileSummaries(files),
     };
   }
 
@@ -137,22 +124,7 @@ export class ReviewService {
       this.github.getPullRequestFiles(accessToken, owner, repo, number),
     ]);
 
-    const skippedFiles: string[] = [];
-    const analyzable = files.filter((file) => {
-      if (!file.patch) {
-        skippedFiles.push(file.filename);
-        return false;
-      }
-      return true;
-    });
-
-    if (analyzable.length > MAX_CHANGED_FILES) {
-      for (const file of analyzable.slice(MAX_CHANGED_FILES)) {
-        skippedFiles.push(file.filename);
-      }
-    }
-
-    const included = analyzable.slice(0, MAX_CHANGED_FILES);
+    const { included, skippedFiles } = partitionAnalyzableFiles(files);
     if (!included.length) {
       return {
         pullRequestNumber: number,
@@ -163,38 +135,15 @@ export class ReviewService {
       };
     }
 
-    const fileContexts = await Promise.all(
-      included.map(async (file) => {
-        const patch = truncatePatch(file.patch!, MAX_PATCH_CHARS);
-        const validLines = extractRightSideLines(patch);
-        const chunks = await this.retrieval.retrieveContext({
-          userId,
-          knowledgeBaseId: knowledgeBase.knowledgeBaseId,
-          query: buildRetrievalQuery({
-            title: pullRequest.title,
-            body: pullRequest.body,
-            filename: file.filename,
-            patch,
-          }),
-          limit: MAX_CONTEXT_CHUNKS_PER_FILE,
-        });
+    const fileContexts = await this.buildFileContexts({
+      userId,
+      knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+      title: pullRequest.title,
+      body: pullRequest.body,
+      files: included,
+    });
 
-        return {
-          filename: file.filename,
-          patch,
-          validLines,
-          context: formatContextChunks(
-            preferMatchingChunks(
-              chunks,
-              file.filename,
-              MAX_CONTEXT_CHUNKS_PER_FILE,
-            ),
-          ),
-        };
-      }),
-    );
-
-    const rawComments = await this.generateComments({
+    const rawComments = await this.llm.generateComments({
       title: pullRequest.title,
       body: pullRequest.body,
       files: fileContexts.map((file) => ({
@@ -218,33 +167,10 @@ export class ReviewService {
     owner: string,
     repo: string,
     number: number,
-    input: {
-      body?: string;
-      comments: PublishReviewCommentInput[];
-    },
+    input: PublishReviewInput,
   ): Promise<PublishReviewResult> {
     await this.knowledge.getReadyKnowledgeBase(userId, owner, repo);
-
-    if (!input.comments?.length) {
-      throw AppError.badRequest("Select at least one comment to publish.");
-    }
-
-    if (input.comments.length > MAX_COMMENTS) {
-      throw AppError.badRequest(
-        `You can publish at most ${MAX_COMMENTS} comments at once.`,
-      );
-    }
-
-    for (const comment of input.comments) {
-      if (!comment.path?.trim() || !comment.body?.trim()) {
-        throw AppError.badRequest(
-          "Each comment requires a file path and body.",
-        );
-      }
-      if (!Number.isInteger(comment.line) || comment.line < 1) {
-        throw AppError.badRequest("Each comment requires a valid line number.");
-      }
-    }
+    assertPublishComments(input.comments);
 
     const accessToken = await this.github.getAccessToken(userId);
     const pullRequest = await this.github.getPullRequest(
@@ -262,12 +188,7 @@ export class ReviewService {
       {
         commitId: pullRequest.headSha,
         body: input.body?.trim() || DEFAULT_REVIEW_SUMMARY,
-        comments: input.comments.map((comment) => ({
-          path: comment.path.trim(),
-          body: comment.body.trim(),
-          line: comment.line,
-          side: comment.side === "LEFT" ? "LEFT" : "RIGHT",
-        })),
+        comments: toGithubReviewComments(input.comments),
       },
     );
 
@@ -304,11 +225,7 @@ export class ReviewService {
       owner,
       repo,
     );
-    const targetBranch = input.targetBranch?.trim();
-    if (!targetBranch) {
-      throw AppError.badRequest("A target branch is required for auto-review.");
-    }
-
+    const targetBranch = assertTargetBranch(input.targetBranch);
     const existing = await this.autoReviewConfigs.findByUserOwnerRepo(
       userId,
       owner,
@@ -341,52 +258,12 @@ export class ReviewService {
       return toAutoReviewConfigView(disabled);
     }
 
-    if (!env.GITHUB_WEBHOOK_SECRET) {
-      throw AppError.serviceUnavailable(
-        "GITHUB_WEBHOOK_SECRET is required to enable auto-review. Add it to server/.env.",
-      );
-    }
-
-    const webhookUrl = buildGithubWebhookUrl();
-    let webhookId = existing?.webhookId ?? undefined;
-    let webhookActive = false;
-
-    if (webhookId) {
-      const current = await this.github.getWebhook(
-        accessToken,
-        owner,
-        repo,
-        webhookId,
-      );
-      if (current) {
-        webhookActive = current.active;
-      } else {
-        webhookId = undefined;
-      }
-    }
-
-    if (!webhookId) {
-      try {
-        const created = await this.github.createWebhook(
-          accessToken,
-          owner,
-          repo,
-          {
-            url: webhookUrl,
-            secret: env.GITHUB_WEBHOOK_SECRET,
-          },
-        );
-        webhookId = created.id;
-        webhookActive = created.active;
-      } catch (error) {
-        if (error instanceof AppError && error.statusCode === 403) {
-          throw AppError.forbidden(
-            "Need admin access on this repository to manage webhooks for auto-review.",
-          );
-        }
-        throw error;
-      }
-    }
+    const webhook = await this.ensureRepositoryWebhook(
+      accessToken,
+      owner,
+      repo,
+      existing?.webhookId,
+    );
 
     const saved = await this.autoReviewConfigs.upsert({
       userId,
@@ -396,19 +273,16 @@ export class ReviewService {
       repo,
       enabled: true,
       targetBranch,
-      webhookId,
-      webhookActive,
+      webhookId: webhook.webhookId,
+      webhookActive: webhook.webhookActive,
     });
 
     return toAutoReviewConfigView(saved);
   }
 
-  public async handleGithubWebhook(input: {
-    rawBody: Buffer;
-    signatureHeader?: string;
-    eventName?: string;
-    deliveryId?: string;
-  }): Promise<{ accepted: boolean; enqueued: number }> {
+  public async handleGithubWebhook(
+    input: HandleGithubWebhookInput,
+  ): Promise<{ accepted: boolean; enqueued: number }> {
     if (!env.GITHUB_WEBHOOK_SECRET) {
       throw AppError.serviceUnavailable(
         "GITHUB_WEBHOOK_SECRET is not configured.",
@@ -480,13 +354,9 @@ export class ReviewService {
     };
   }
 
-  public async processAutoReviewJob(job: {
-    jobId: string;
-    userId: string;
-    owner: string;
-    repo: string;
-    prNumber: number;
-  }): Promise<void> {
+  public async processAutoReviewJob(
+    job: ProcessAutoReviewJobInput,
+  ): Promise<void> {
     const analysis = await this.analyzePullRequest(
       job.userId,
       job.owner,
@@ -509,46 +379,102 @@ export class ReviewService {
 
     await this.publishReview(job.userId, job.owner, job.repo, job.prNumber, {
       body: AUTO_REVIEW_SUMMARY,
-      comments: analysis.comments.map((comment) => ({
-        path: comment.path,
-        line: comment.line,
-        side: comment.side,
-        body: comment.body,
-      })),
+      comments: toPublishCommentsFromDrafts(analysis.comments),
     });
   }
 
-  private async generateComments(input: {
+  private async buildFileContexts(input: {
+    userId: string;
+    knowledgeBaseId: string;
     title: string;
     body: string | null;
-    files: Array<{ filename: string; patch: string; context: string }>;
-  }): Promise<LlmComment[]> {
-    const openAI = this.getOpenAIClient();
-    const response = await openAI.responses.create({
-      model: REVIEW_LLM_MODEL,
-      input: [
-        {
-          role: "system",
-          content: buildReviewSystemPrompt(),
-        },
-        {
-          role: "user",
-          content: buildReviewUserPrompt(input),
-        },
-      ],
-    });
+    files: Array<{ filename: string; patch?: string }>;
+  }): Promise<AnalyzeFileContext[]> {
+    return Promise.all(
+      input.files.map(async (file) => {
+        const patch = truncatePatch(file.patch!, MAX_PATCH_CHARS);
+        const validLines = extractRightSideLines(patch);
+        const chunks = await this.retrieval.retrieveContext({
+          userId: input.userId,
+          knowledgeBaseId: input.knowledgeBaseId,
+          query: buildRetrievalQuery({
+            title: input.title,
+            body: input.body,
+            filename: file.filename,
+            patch,
+          }),
+          limit: MAX_CONTEXT_CHUNKS_PER_FILE,
+        });
 
-    return parseLlmCommentsJson(response.output_text?.trim() ?? "[]");
+        return {
+          filename: file.filename,
+          patch,
+          validLines,
+          context: formatContextChunks(
+            preferMatchingChunks(
+              chunks,
+              file.filename,
+              MAX_CONTEXT_CHUNKS_PER_FILE,
+            ),
+          ),
+        };
+      }),
+    );
   }
 
-  private getOpenAIClient() {
-    if (!env.OPENAI_API_KEY) {
+  private async ensureRepositoryWebhook(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    existingWebhookId?: number,
+  ): Promise<{ webhookId: number; webhookActive: boolean }> {
+    if (!env.GITHUB_WEBHOOK_SECRET) {
       throw AppError.serviceUnavailable(
-        "OPENAI_API_KEY is required for pull request review. Add it to server/.env.",
+        "GITHUB_WEBHOOK_SECRET is required to enable auto-review. Add it to server/.env.",
       );
     }
 
-    this.openAIClient ??= new OpenAI({ apiKey: env.OPENAI_API_KEY });
-    return this.openAIClient;
+    const webhookUrl = buildGithubWebhookUrl();
+    let webhookId = existingWebhookId;
+    let webhookActive = false;
+
+    if (webhookId) {
+      const current = await this.github.getWebhook(
+        accessToken,
+        owner,
+        repo,
+        webhookId,
+      );
+      if (current) {
+        return {
+          webhookId: current.id,
+          webhookActive: current.active,
+        };
+      }
+      webhookId = undefined;
+    }
+
+    try {
+      const created = await this.github.createWebhook(
+        accessToken,
+        owner,
+        repo,
+        {
+          url: webhookUrl,
+          secret: env.GITHUB_WEBHOOK_SECRET,
+        },
+      );
+      return {
+        webhookId: created.id,
+        webhookActive: created.active,
+      };
+    } catch (error) {
+      if (error instanceof AppError && error.statusCode === 403) {
+        throw AppError.forbidden(
+          "Need admin access on this repository to manage webhooks for auto-review.",
+        );
+      }
+      throw error;
+    }
   }
 }

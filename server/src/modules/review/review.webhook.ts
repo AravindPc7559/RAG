@@ -1,16 +1,6 @@
 import { AppError } from "../../shared/errors/AppError.js";
 import { AUTO_REVIEW_ACTIONS } from "./review.constants.js";
-
-export interface ParsedPullRequestWebhook {
-  action: string;
-  prNumber: number;
-  headSha: string;
-  baseRef: string;
-  githubRepoId: string;
-  owner: string;
-  repo: string;
-  isDraft: boolean;
-}
+import type { ParsedPullRequestWebhook } from "./review.types.js";
 
 export function parsePullRequestWebhookPayload(
   rawBody: Buffer,

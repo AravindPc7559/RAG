@@ -60,3 +60,45 @@ export interface AutoReviewConfig {
   targetBranch: string;
   webhookActive: boolean;
 }
+
+export type PullStateFilter = "open" | "closed" | "all";
+
+export interface PublishReviewInput {
+  body?: string;
+  comments: Array<Pick<ReviewDraftComment, "path" | "line" | "side" | "body">>;
+}
+
+export interface UpdateAutoReviewInput {
+  enabled: boolean;
+  targetBranch: string;
+}
+
+export interface ListPullRequestsResponse {
+  message: string;
+  knowledgeBaseId: string;
+  fullName: string;
+  pullRequests: ReviewPullRequest[];
+  page: number;
+  perPage: number;
+  hasNextPage: boolean;
+}
+
+export interface PullRequestDetailResponse {
+  message: string;
+  knowledgeBaseId: string;
+  pullRequest: ReviewPullRequest;
+  files: ReviewPullRequestFile[];
+}
+
+export interface AnalyzeReviewResponse extends AnalyzeReviewResult {
+  message: string;
+}
+
+export interface PublishReviewResponse extends PublishReviewResult {
+  message: string;
+}
+
+export interface AutoReviewResponse {
+  message: string;
+  autoReview: AutoReviewConfig;
+}
