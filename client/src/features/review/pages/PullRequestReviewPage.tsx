@@ -11,18 +11,9 @@ import type {
   ReviewPullRequest,
   ReviewPullRequestFile,
 } from "@/features/review/types/review.types";
+import { reviewSeverityClass } from "@/features/review/utils/reviewFormat";
 import { toApiErrorPayload } from "@/services/apiErrors";
 import { useToast } from "@/shared/hooks/useToast";
-
-function severityClass(severity: ReviewDraftComment["severity"]) {
-  if (severity === "important") {
-    return "review-comment__severity review-comment__severity--important";
-  }
-  if (severity === "warning") {
-    return "review-comment__severity review-comment__severity--warning";
-  }
-  return "review-comment__severity";
-}
 
 export function PullRequestReviewPage() {
   const { owner = "", repo = "", number: numberParam = "" } = useParams();
@@ -356,7 +347,7 @@ export function PullRequestReviewPage() {
                             checked={selectedIds.has(comment.id)}
                             onChange={() => toggleComment(comment.id)}
                           />
-                          <span className={severityClass(comment.severity)}>
+                          <span className={reviewSeverityClass(comment.severity)}>
                             {comment.severity}
                           </span>
                           <strong>

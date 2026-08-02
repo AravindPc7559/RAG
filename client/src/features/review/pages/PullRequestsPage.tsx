@@ -3,25 +3,13 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { paths, createPullRequestPath, createPullRequestsPath } from "@/app/router/paths";
 import { reviewApi } from "@/features/review/api/reviewApi";
-import type { ReviewPullRequest } from "@/features/review/types/review.types";
+import type {
+  PullStateFilter,
+  ReviewPullRequest,
+} from "@/features/review/types/review.types";
+import { formatReviewTimestamp } from "@/features/review/utils/reviewFormat";
 import { toApiErrorPayload } from "@/services/apiErrors";
 import { useToast } from "@/shared/hooks/useToast";
-
-type PullStateFilter = "open" | "closed" | "all";
-
-function formatUpdatedAt(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown";
-  }
-  return date.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 export function PullRequestsPage() {
   const { owner = "", repo = "" } = useParams();
@@ -190,7 +178,7 @@ export function PullRequestsPage() {
                   <span>
                     {pullRequest.baseRef} ← {pullRequest.headRef}
                   </span>
-                  <span>Updated {formatUpdatedAt(pullRequest.updatedAt)}</span>
+                  <span>Updated {formatReviewTimestamp(pullRequest.updatedAt)}</span>
                 </div>
                 {pullRequest.labels.length > 0 ? (
                   <div className="review-pr-card__labels">

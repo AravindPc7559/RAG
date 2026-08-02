@@ -2,32 +2,13 @@ import { randomUUID } from "node:crypto";
 
 import mongoose from "mongoose";
 
+import { REVIEW_JOB_STALE_ACTIVE_MS } from "./review.constants.js";
 import {
   ReviewJobModel,
   type ReviewJobDocument,
 } from "./review.job.model.js";
-
-const STALE_ACTIVE_MS = 30 * 60 * 1000;
-
-export interface EnqueueReviewJobInput {
-  userId: string;
-  knowledgeBaseId: string;
-  owner: string;
-  repo: string;
-  prNumber: number;
-  headSha: string;
-  deliveryId?: string;
-  action: string;
-}
-
-function isDuplicateKeyError(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: number }).code === 11000
-  );
-}
+import { isDuplicateKeyError } from "./review.mongo.js";
+import type { EnqueueReviewJobInput } from "./review.types.js";
 
 export class ReviewJobRepository {
   public async enqueue(
@@ -56,7 +37,7 @@ export class ReviewJobRepository {
   }
 
   public async reclaimStaleJobs(): Promise<number> {
-    const staleBefore = new Date(Date.now() - STALE_ACTIVE_MS);
+    const staleBefore = new Date(Date.now() - REVIEW_JOB_STALE_ACTIVE_MS);
     const result = await ReviewJobModel.updateMany(
       {
         status: "active",

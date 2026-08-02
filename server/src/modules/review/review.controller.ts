@@ -1,48 +1,15 @@
 import type { RequestHandler } from "express";
 
-import { AppError } from "../../shared/errors/AppError.js";
 import {
-  readHeaderValue,
-  readPositiveIntParam,
-  readStringParam,
-} from "../../shared/utils/requestParams.js";
+  readListPullRequestsQuery,
+  readPublishReviewBody,
+  readUpdateAutoReviewBody,
+  readWebhookRequest,
+  requirePullParams,
+  requireRepoParams,
+  requireUserId,
+} from "./review.request.js";
 import type { ReviewService } from "./review.service.js";
-import type { PublishReviewCommentInput } from "./review.types.js";
-import { readPullRequestState } from "./review.utils.js";
-
-function requireUserId(userId: string | undefined): string {
-  if (!userId) {
-    throw AppError.unauthorized();
-  }
-  return userId;
-}
-
-function requireRepoParams(params: {
-  owner?: string | string[];
-  repo?: string | string[];
-}): { owner: string; repo: string } {
-  const owner = readStringParam(params.owner);
-  const repo = readStringParam(params.repo);
-  if (!owner || !repo) {
-    throw AppError.badRequest("Repository owner and name are required.");
-  }
-  return { owner, repo };
-}
-
-function requirePullParams(params: {
-  owner?: string | string[];
-  repo?: string | string[];
-  number?: string | string[];
-}): { owner: string; repo: string; number: number } {
-  const { owner, repo } = requireRepoParams(params);
-  const number = readPositiveIntParam(params.number);
-  if (number === null) {
-    throw AppError.badRequest(
-      "Repository and pull request number are required.",
-    );
-  }
-  return { owner, repo, number };
-}
 
 export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
@@ -50,18 +17,12 @@ export class ReviewController {
   public listPullRequests: RequestHandler = async (request, response) => {
     const userId = requireUserId(request.user?.id);
     const { owner, repo } = requireRepoParams(request.params);
-    const page = Number(request.query.page);
-    const perPage = Number(request.query.perPage);
 
     const result = await this.reviewService.listPullRequests(
       userId,
       owner,
       repo,
-      {
-        state: readPullRequestState(request.query.state),
-        ...(Number.isInteger(page) && page > 0 ? { page } : {}),
-        ...(Number.isInteger(perPage) && perPage > 0 ? { perPage } : {}),
-      },
+      readListPullRequestsQuery(request.query),
     );
 
     response.status(200).json({
@@ -108,18 +69,12 @@ export class ReviewController {
     const userId = requireUserId(request.user?.id);
     const { owner, repo, number } = requirePullParams(request.params);
 
-    const body =
-      typeof request.body?.body === "string" ? request.body.body : undefined;
-    const comments = Array.isArray(request.body?.comments)
-      ? (request.body.comments as PublishReviewCommentInput[])
-      : [];
-
     const result = await this.reviewService.publishReview(
       userId,
       owner,
       repo,
       number,
-      { body, comments },
+      readPublishReviewBody(request.body),
     );
 
     response.status(200).json({
@@ -147,22 +102,17 @@ export class ReviewController {
   public updateAutoReview: RequestHandler = async (request, response) => {
     const userId = requireUserId(request.user?.id);
     const { owner, repo } = requireRepoParams(request.params);
-
-    const enabled = Boolean(request.body?.enabled);
-    const targetBranch =
-      typeof request.body?.targetBranch === "string"
-        ? request.body.targetBranch
-        : "";
+    const input = readUpdateAutoReviewBody(request.body);
 
     const autoReview = await this.reviewService.updateAutoReviewConfig(
       userId,
       owner,
       repo,
-      { enabled, targetBranch },
+      input,
     );
 
     response.status(200).json({
-      message: enabled
+      message: input.enabled
         ? "Auto-review enabled successfully"
         : "Auto-review disabled successfully",
       autoReview,
@@ -170,20 +120,9 @@ export class ReviewController {
   };
 
   public handleGithubWebhook: RequestHandler = async (request, response) => {
-    const rawBody = Buffer.isBuffer(request.body)
-      ? request.body
-      : Buffer.from(
-          typeof request.body === "string"
-            ? request.body
-            : JSON.stringify(request.body ?? {}),
-        );
-
-    const result = await this.reviewService.handleGithubWebhook({
-      rawBody,
-      signatureHeader: readHeaderValue(request.headers["x-hub-signature-256"]),
-      eventName: readHeaderValue(request.headers["x-github-event"]),
-      deliveryId: readHeaderValue(request.headers["x-github-delivery"]),
-    });
+    const result = await this.reviewService.handleGithubWebhook(
+      readWebhookRequest(request),
+    );
 
     response.status(202).json({
       message: "Webhook accepted",

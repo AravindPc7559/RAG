@@ -5,7 +5,6 @@ import { AppError } from "../../shared/errors/AppError.js";
 import { MAX_COMMENTS } from "./review.constants.js";
 import { pickNearestValidLine } from "./review.patch.js";
 import type {
-  AutoReviewConfigView,
   LlmComment,
   ReviewCommentSeverity,
   ReviewDraftComment,
@@ -13,26 +12,6 @@ import type {
 
 export function buildGithubWebhookUrl(): string {
   return `${env.APP_PUBLIC_URL.replace(/\/$/, "")}${env.API_PREFIX}/review/webhooks/github`;
-}
-
-export function toAutoReviewConfigView(input?: {
-  enabled: boolean;
-  targetBranch: string;
-  webhookActive: boolean;
-} | null): AutoReviewConfigView {
-  if (!input) {
-    return {
-      enabled: false,
-      targetBranch: "",
-      webhookActive: false,
-    };
-  }
-
-  return {
-    enabled: input.enabled,
-    targetBranch: input.targetBranch,
-    webhookActive: input.webhookActive,
-  };
 }
 
 export function buildRetrievalQuery(input: {

@@ -1,4 +1,5 @@
 import { logger } from "../../config/logger.js";
+import { REVIEW_WORKER_POLL_INTERVAL_MS } from "./review.constants.js";
 import type { ReviewJobRepository } from "./review.job.repository.js";
 import type { ReviewService } from "./review.service.js";
 
@@ -10,7 +11,7 @@ export class ReviewWorker {
   constructor(
     private readonly reviewService: ReviewService,
     private readonly jobRepository: ReviewJobRepository,
-    private readonly pollIntervalMs = 2_000,
+    private readonly pollIntervalMs = REVIEW_WORKER_POLL_INTERVAL_MS,
   ) {}
 
   public start() {

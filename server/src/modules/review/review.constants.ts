@@ -14,3 +14,7 @@ export const AUTO_REVIEW_ACTIONS = new Set([
   "synchronize",
   "ready_for_review",
 ]);
+
+/** Re-queue auto-review jobs stuck in "active" longer than this. */
+export const REVIEW_JOB_STALE_ACTIVE_MS = 30 * 60 * 1000;
+export const REVIEW_WORKER_POLL_INTERVAL_MS = 2_000;

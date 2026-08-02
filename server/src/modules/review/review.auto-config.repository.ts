@@ -4,18 +4,7 @@ import {
   AutoReviewConfigModel,
   type AutoReviewConfigDocument,
 } from "./review.auto-config.model.js";
-
-export interface UpsertAutoReviewConfigInput {
-  userId: string;
-  knowledgeBaseId: string;
-  githubRepoId: string;
-  owner: string;
-  repo: string;
-  enabled: boolean;
-  targetBranch: string;
-  webhookId?: number | null;
-  webhookActive: boolean;
-}
+import type { UpsertAutoReviewConfigInput } from "./review.types.js";
 
 export class AutoReviewConfigRepository {
   public async findByUserOwnerRepo(
