@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { createChatPath, createPullRequestsPath } from "@/app/router/paths";
@@ -26,6 +26,16 @@ import {
 } from "@/features/knowledge/types/knowledge.types";
 import { useToast } from "@/shared/hooks/useToast";
 
+type GithubRepoTab = "imported" | "available";
+
+function isImportedRepository(
+  repository: GithubRepository,
+  knowledgeByRepo: ReturnType<typeof selectKnowledgeByRepo>,
+) {
+  const key = knowledgeRepoKey(repository.owner, repository.name);
+  return Boolean(knowledgeByRepo[key]?.knowledgeBase);
+}
+
 export function GitHubPage() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
@@ -33,6 +43,7 @@ export function GitHubPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const oauthHandledRef = useRef(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  const [activeTab, setActiveTab] = useState<GithubRepoTab>("imported");
   const knowledgeByRepo = useAppSelector(selectKnowledgeByRepo);
 
   const {
@@ -182,6 +193,7 @@ export function GitHubPage() {
     );
 
     if (importGithubRepository.fulfilled.match(result)) {
+      setActiveTab("imported");
       showToast(
         `${repository.fullName} import started. Indexing in the background…`,
         "info",
@@ -278,6 +290,49 @@ export function GitHubPage() {
   const showReposError =
     isConnected && repositoriesStatus === "failed" && !isLoadingRepositories;
 
+  const { importedRepositories, availableRepositories } = useMemo(() => {
+    const imported: GithubRepository[] = [];
+    const available: GithubRepository[] = [];
+
+    for (const repository of repositories) {
+      if (isImportedRepository(repository, knowledgeByRepo)) {
+        imported.push(repository);
+      } else {
+        available.push(repository);
+      }
+    }
+
+    return {
+      importedRepositories: imported,
+      availableRepositories: available,
+    };
+  }, [knowledgeByRepo, repositories]);
+
+  const visibleRepositories =
+    activeTab === "imported" ? importedRepositories : availableRepositories;
+  const defaultTabAppliedRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      defaultTabAppliedRef.current ||
+      !isConnected ||
+      isLoadingRepositories ||
+      repositories.length === 0
+    ) {
+      return;
+    }
+
+    setActiveTab(
+      importedRepositories.length > 0 ? "imported" : "available",
+    );
+    defaultTabAppliedRef.current = true;
+  }, [
+    importedRepositories.length,
+    isConnected,
+    isLoadingRepositories,
+    repositories.length,
+  ]);
+
   return (
     <section className="documents-page github-page">
       <header className="page-heading">
@@ -300,8 +355,10 @@ export function GitHubPage() {
               Refresh list
             </button>
             <span className="document-library__count">
-              {repositories.length}{" "}
-              {repositories.length === 1 ? "repository" : "repositories"}
+              {visibleRepositories.length}{" "}
+              {visibleRepositories.length === 1
+                ? "repository"
+                : "repositories"}
             </span>
           </div>
         ) : null}
@@ -370,26 +427,101 @@ export function GitHubPage() {
           ) : null}
 
           {repositories.length > 0 ? (
-            <div className="documents-page__grid github-page__grid">
-              {repositories.map((repository) => {
-                const key = knowledgeRepoKey(
-                  repository.owner,
-                  repository.name,
-                );
-                return (
-                  <GithubRepoCard
-                    key={repository.id}
-                    repository={repository}
-                    knowledge={knowledgeByRepo[key]}
-                    onViewDetails={(repo) => void handleViewDetails(repo)}
-                    onSync={(repo) => void handleSyncKnowledge(repo)}
-                    onImport={(repo) => void handleImport(repo)}
-                    onOpenChat={handleOpenChat}
-                    onOpenPullRequests={handleOpenPullRequests}
-                  />
-                );
-              })}
-            </div>
+            <>
+              <div
+                className="github-page__tabs"
+                role="tablist"
+                aria-label="Repository sections"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  id="github-tab-imported"
+                  aria-selected={activeTab === "imported"}
+                  aria-controls="github-panel-imported"
+                  className={`github-page__tab${
+                    activeTab === "imported" ? " is-active" : ""
+                  }`}
+                  onClick={() => setActiveTab("imported")}
+                >
+                  Imported
+                  <span className="github-page__tab-count">
+                    {importedRepositories.length}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="github-tab-available"
+                  aria-selected={activeTab === "available"}
+                  aria-controls="github-panel-available"
+                  className={`github-page__tab${
+                    activeTab === "available" ? " is-active" : ""
+                  }`}
+                  onClick={() => setActiveTab("available")}
+                >
+                  Available
+                  <span className="github-page__tab-count">
+                    {availableRepositories.length}
+                  </span>
+                </button>
+              </div>
+
+              <div
+                id={
+                  activeTab === "imported"
+                    ? "github-panel-imported"
+                    : "github-panel-available"
+                }
+                role="tabpanel"
+                aria-labelledby={
+                  activeTab === "imported"
+                    ? "github-tab-imported"
+                    : "github-tab-available"
+                }
+              >
+                {visibleRepositories.length > 0 ? (
+                  <div className="documents-page__grid github-page__grid">
+                    {visibleRepositories.map((repository) => {
+                      const key = knowledgeRepoKey(
+                        repository.owner,
+                        repository.name,
+                      );
+                      return (
+                        <GithubRepoCard
+                          key={repository.id}
+                          repository={repository}
+                          knowledge={knowledgeByRepo[key]}
+                          onViewDetails={(repo) => void handleViewDetails(repo)}
+                          onSync={(repo) => void handleSyncKnowledge(repo)}
+                          onImport={(repo) => void handleImport(repo)}
+                          onOpenChat={handleOpenChat}
+                          onOpenPullRequests={handleOpenPullRequests}
+                        />
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="document-library__empty github-page__tab-empty">
+                    <p>
+                      {activeTab === "imported"
+                        ? "No imported repositories yet. Switch to Available and import a repo to get started."
+                        : "All repositories are already imported."}
+                    </p>
+                    {activeTab === "imported" &&
+                    availableRepositories.length > 0 ? (
+                      <button
+                        type="button"
+                        className="button button--secondary"
+                        onClick={() => setActiveTab("available")}
+                      >
+                        Browse available
+                      </button>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+            </>
           ) : null}
         </>
       ) : null}
