@@ -211,14 +211,6 @@ export function GithubRepoCard({
           >
             Pull requests
           </button>
-          <a
-            className="button button--ghost-dark button--compact"
-            href={repository.htmlUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open on GitHub
-          </a>
         </div>
       </div>
     </article>
