@@ -1,6 +1,7 @@
 import { env } from "@/config/env";
 import type {
   AnalyzeReviewResult,
+  AutoReviewConfig,
   PublishReviewResult,
   ReviewDraftComment,
   ReviewPullRequest,
@@ -33,8 +34,17 @@ interface PublishResponse extends PublishReviewResult {
   message: string;
 }
 
+interface AutoReviewResponse {
+  message: string;
+  autoReview: AutoReviewConfig;
+}
+
 function pullsBase(owner: string, repo: string) {
   return `/review/github/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls`;
+}
+
+function autoReviewPath(owner: string, repo: string) {
+  return `/review/github/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/auto-review`;
 }
 
 export const reviewApi = {
@@ -87,5 +97,24 @@ export const reviewApi = {
       input,
     );
     return response.data;
+  },
+
+  async getAutoReview(owner: string, repo: string) {
+    const response = await baseService.get<AutoReviewResponse>(
+      autoReviewPath(owner, repo),
+    );
+    return response.data.autoReview;
+  },
+
+  async updateAutoReview(
+    owner: string,
+    repo: string,
+    input: { enabled: boolean; targetBranch: string },
+  ) {
+    const response = await baseService.put<AutoReviewResponse>(
+      autoReviewPath(owner, repo),
+      input,
+    );
+    return response.data.autoReview;
   },
 };

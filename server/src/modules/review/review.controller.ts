@@ -1,52 +1,55 @@
 import type { RequestHandler } from "express";
 
 import { AppError } from "../../shared/errors/AppError.js";
+import {
+  readHeaderValue,
+  readPositiveIntParam,
+  readStringParam,
+} from "../../shared/utils/requestParams.js";
 import type { ReviewService } from "./review.service.js";
 import type { PublishReviewCommentInput } from "./review.types.js";
+import { readPullRequestState } from "./review.utils.js";
 
-function readParam(value: string | string[] | undefined): string | undefined {
-  if (typeof value === "string" && value.trim()) {
-    return value.trim();
+function requireUserId(userId: string | undefined): string {
+  if (!userId) {
+    throw AppError.unauthorized();
   }
-  return undefined;
+  return userId;
 }
 
-function readPullNumber(value: string | string[] | undefined): number | null {
-  const raw = readParam(value);
-  if (!raw) {
-    return null;
+function requireRepoParams(params: {
+  owner?: string | string[];
+  repo?: string | string[];
+}): { owner: string; repo: string } {
+  const owner = readStringParam(params.owner);
+  const repo = readStringParam(params.repo);
+  if (!owner || !repo) {
+    throw AppError.badRequest("Repository owner and name are required.");
   }
-  const number = Number(raw);
-  if (!Number.isInteger(number) || number < 1) {
-    return null;
-  }
-  return number;
+  return { owner, repo };
 }
 
-function readState(
-  value: unknown,
-): "open" | "closed" | "all" | undefined {
-  if (value === "open" || value === "closed" || value === "all") {
-    return value;
+function requirePullParams(params: {
+  owner?: string | string[];
+  repo?: string | string[];
+  number?: string | string[];
+}): { owner: string; repo: string; number: number } {
+  const { owner, repo } = requireRepoParams(params);
+  const number = readPositiveIntParam(params.number);
+  if (number === null) {
+    throw AppError.badRequest(
+      "Repository and pull request number are required.",
+    );
   }
-  return undefined;
+  return { owner, repo, number };
 }
 
 export class ReviewController {
   constructor(private readonly reviewService: ReviewService) {}
 
   public listPullRequests: RequestHandler = async (request, response) => {
-    const userId = request.user?.id;
-    if (!userId) {
-      throw AppError.unauthorized();
-    }
-
-    const owner = readParam(request.params.owner);
-    const repo = readParam(request.params.repo);
-    if (!owner || !repo) {
-      throw AppError.badRequest("Repository owner and name are required.");
-    }
-
+    const userId = requireUserId(request.user?.id);
+    const { owner, repo } = requireRepoParams(request.params);
     const page = Number(request.query.page);
     const perPage = Number(request.query.perPage);
 
@@ -55,7 +58,7 @@ export class ReviewController {
       owner,
       repo,
       {
-        state: readState(request.query.state),
+        state: readPullRequestState(request.query.state),
         ...(Number.isInteger(page) && page > 0 ? { page } : {}),
         ...(Number.isInteger(perPage) && perPage > 0 ? { perPage } : {}),
       },
@@ -68,17 +71,8 @@ export class ReviewController {
   };
 
   public getPullRequest: RequestHandler = async (request, response) => {
-    const userId = request.user?.id;
-    if (!userId) {
-      throw AppError.unauthorized();
-    }
-
-    const owner = readParam(request.params.owner);
-    const repo = readParam(request.params.repo);
-    const number = readPullNumber(request.params.number);
-    if (!owner || !repo || number === null) {
-      throw AppError.badRequest("Repository and pull request number are required.");
-    }
+    const userId = requireUserId(request.user?.id);
+    const { owner, repo, number } = requirePullParams(request.params);
 
     const detail = await this.reviewService.getPullRequestDetail(
       userId,
@@ -94,17 +88,8 @@ export class ReviewController {
   };
 
   public analyzePullRequest: RequestHandler = async (request, response) => {
-    const userId = request.user?.id;
-    if (!userId) {
-      throw AppError.unauthorized();
-    }
-
-    const owner = readParam(request.params.owner);
-    const repo = readParam(request.params.repo);
-    const number = readPullNumber(request.params.number);
-    if (!owner || !repo || number === null) {
-      throw AppError.badRequest("Repository and pull request number are required.");
-    }
+    const userId = requireUserId(request.user?.id);
+    const { owner, repo, number } = requirePullParams(request.params);
 
     const result = await this.reviewService.analyzePullRequest(
       userId,
@@ -120,17 +105,8 @@ export class ReviewController {
   };
 
   public publishReview: RequestHandler = async (request, response) => {
-    const userId = request.user?.id;
-    if (!userId) {
-      throw AppError.unauthorized();
-    }
-
-    const owner = readParam(request.params.owner);
-    const repo = readParam(request.params.repo);
-    const number = readPullNumber(request.params.number);
-    if (!owner || !repo || number === null) {
-      throw AppError.badRequest("Repository and pull request number are required.");
-    }
+    const userId = requireUserId(request.user?.id);
+    const { owner, repo, number } = requirePullParams(request.params);
 
     const body =
       typeof request.body?.body === "string" ? request.body.body : undefined;
@@ -148,6 +124,69 @@ export class ReviewController {
 
     response.status(200).json({
       message: "Review published successfully",
+      ...result,
+    });
+  };
+
+  public getAutoReview: RequestHandler = async (request, response) => {
+    const userId = requireUserId(request.user?.id);
+    const { owner, repo } = requireRepoParams(request.params);
+
+    const autoReview = await this.reviewService.getAutoReviewConfig(
+      userId,
+      owner,
+      repo,
+    );
+
+    response.status(200).json({
+      message: "Auto-review settings fetched successfully",
+      autoReview,
+    });
+  };
+
+  public updateAutoReview: RequestHandler = async (request, response) => {
+    const userId = requireUserId(request.user?.id);
+    const { owner, repo } = requireRepoParams(request.params);
+
+    const enabled = Boolean(request.body?.enabled);
+    const targetBranch =
+      typeof request.body?.targetBranch === "string"
+        ? request.body.targetBranch
+        : "";
+
+    const autoReview = await this.reviewService.updateAutoReviewConfig(
+      userId,
+      owner,
+      repo,
+      { enabled, targetBranch },
+    );
+
+    response.status(200).json({
+      message: enabled
+        ? "Auto-review enabled successfully"
+        : "Auto-review disabled successfully",
+      autoReview,
+    });
+  };
+
+  public handleGithubWebhook: RequestHandler = async (request, response) => {
+    const rawBody = Buffer.isBuffer(request.body)
+      ? request.body
+      : Buffer.from(
+          typeof request.body === "string"
+            ? request.body
+            : JSON.stringify(request.body ?? {}),
+        );
+
+    const result = await this.reviewService.handleGithubWebhook({
+      rawBody,
+      signatureHeader: readHeaderValue(request.headers["x-hub-signature-256"]),
+      eventName: readHeaderValue(request.headers["x-github-event"]),
+      deliveryId: readHeaderValue(request.headers["x-github-delivery"]),
+    });
+
+    response.status(202).json({
+      message: "Webhook accepted",
       ...result,
     });
   };

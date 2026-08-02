@@ -1,39 +1,47 @@
-import { randomUUID } from "node:crypto";
-
 import OpenAI from "openai";
 
 import { env } from "../../config/env.js";
+import { logger } from "../../config/logger.js";
 import { AppError } from "../../shared/errors/AppError.js";
+import type { AutoReviewConfigRepository } from "./review.auto-config.repository.js";
 import {
-  extractRightSideLines,
-  pickNearestValidLine,
-  truncatePatch,
-} from "./review.patch.js";
+  AUTO_REVIEW_SUMMARY,
+  DEFAULT_REVIEW_SUMMARY,
+  MAX_CHANGED_FILES,
+  MAX_COMMENTS,
+  MAX_CONTEXT_CHUNKS_PER_FILE,
+  MAX_PATCH_CHARS,
+  PATCH_PREVIEW_CHARS,
+  REVIEW_LLM_MODEL,
+} from "./review.constants.js";
+import type { ReviewJobRepository } from "./review.job.repository.js";
+import { extractRightSideLines, truncatePatch } from "./review.patch.js";
+import {
+  buildReviewSystemPrompt,
+  buildReviewUserPrompt,
+} from "./review.prompts.js";
 import type {
   AnalyzeReviewResult,
+  AutoReviewConfigView,
   GithubPrPort,
   KnowledgeLookupPort,
+  LlmComment,
   PublishReviewCommentInput,
   PublishReviewResult,
   RetrievalPort,
-  ReviewCommentSeverity,
-  ReviewDraftComment,
   ReviewPullRequestDetail,
+  UpdateAutoReviewInput,
 } from "./review.types.js";
-
-const MAX_CHANGED_FILES = 20;
-const MAX_PATCH_CHARS = 12_000;
-const MAX_CONTEXT_CHUNKS_PER_FILE = 4;
-const MAX_COMMENTS = 25;
-const PATCH_PREVIEW_CHARS = 400;
-
-interface LlmComment {
-  path?: string;
-  line?: number;
-  side?: string;
-  severity?: string;
-  body?: string;
-}
+import {
+  buildGithubWebhookUrl,
+  buildRetrievalQuery,
+  formatContextChunks,
+  normalizeDraftComments,
+  parseLlmCommentsJson,
+  preferMatchingChunks,
+  toAutoReviewConfigView,
+} from "./review.utils.js";
+import { parsePullRequestWebhookPayload } from "./review.webhook.js";
 
 export class ReviewService {
   private openAIClient: OpenAI | null = null;
@@ -42,13 +50,19 @@ export class ReviewService {
     private readonly github: GithubPrPort,
     private readonly knowledge: KnowledgeLookupPort,
     private readonly retrieval: RetrievalPort,
+    private readonly autoReviewConfigs: AutoReviewConfigRepository,
+    private readonly reviewJobs: ReviewJobRepository,
   ) {}
 
   public async listPullRequests(
     userId: string,
     owner: string,
     repo: string,
-    query: { state?: "open" | "closed" | "all"; page?: number; perPage?: number },
+    query: {
+      state?: "open" | "closed" | "all";
+      page?: number;
+      perPage?: number;
+    },
   ) {
     const knowledgeBase = await this.knowledge.getReadyKnowledgeBase(
       userId,
@@ -149,56 +163,36 @@ export class ReviewService {
       };
     }
 
-    const fileContexts: Array<{
-      filename: string;
-      patch: string;
-      validLines: Set<number>;
-      context: string;
-    }> = [];
+    const fileContexts = await Promise.all(
+      included.map(async (file) => {
+        const patch = truncatePatch(file.patch!, MAX_PATCH_CHARS);
+        const validLines = extractRightSideLines(patch);
+        const chunks = await this.retrieval.retrieveContext({
+          userId,
+          knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+          query: buildRetrievalQuery({
+            title: pullRequest.title,
+            body: pullRequest.body,
+            filename: file.filename,
+            patch,
+          }),
+          limit: MAX_CONTEXT_CHUNKS_PER_FILE,
+        });
 
-    for (const file of included) {
-      const patch = truncatePatch(file.patch!, MAX_PATCH_CHARS);
-      const validLines = extractRightSideLines(patch);
-      const query = [
-        pullRequest.title,
-        pullRequest.body ?? "",
-        file.filename,
-        patch.slice(0, 1500),
-      ]
-        .filter(Boolean)
-        .join("\n");
-
-      const chunks = await this.retrieval.retrieveContext({
-        userId,
-        knowledgeBaseId: knowledgeBase.knowledgeBaseId,
-        query,
-        limit: MAX_CONTEXT_CHUNKS_PER_FILE,
-      });
-
-      const preferred = chunks.filter(
-        (chunk) =>
-          chunk.sourcePath &&
-          (chunk.sourcePath === file.filename ||
-            file.filename.endsWith(chunk.sourcePath) ||
-            chunk.sourcePath.endsWith(file.filename)),
-      );
-      const selected = (preferred.length ? preferred : chunks).slice(
-        0,
-        MAX_CONTEXT_CHUNKS_PER_FILE,
-      );
-
-      fileContexts.push({
-        filename: file.filename,
-        patch,
-        validLines,
-        context: selected
-          .map(
-            (chunk) =>
-              `[${chunk.sourcePath ?? "unknown"}]\n${chunk.text}`,
-          )
-          .join("\n\n"),
-      });
-    }
+        return {
+          filename: file.filename,
+          patch,
+          validLines,
+          context: formatContextChunks(
+            preferMatchingChunks(
+              chunks,
+              file.filename,
+              MAX_CONTEXT_CHUNKS_PER_FILE,
+            ),
+          ),
+        };
+      }),
+    );
 
     const rawComments = await this.generateComments({
       title: pullRequest.title,
@@ -210,14 +204,12 @@ export class ReviewService {
       })),
     });
 
-    const comments = this.normalizeComments(rawComments, fileContexts);
-
     return {
       pullRequestNumber: number,
       knowledgeBaseId: knowledgeBase.knowledgeBaseId,
       analyzedFiles: included.map((file) => file.filename),
       skippedFiles,
-      comments,
+      comments: normalizeDraftComments(rawComments, fileContexts),
     };
   }
 
@@ -269,9 +261,7 @@ export class ReviewService {
       number,
       {
         commitId: pullRequest.headSha,
-        body:
-          input.body?.trim() ||
-          "SourceSense knowledge-base review comments.",
+        body: input.body?.trim() || DEFAULT_REVIEW_SUMMARY,
         comments: input.comments.map((comment) => ({
           path: comment.path.trim(),
           body: comment.body.trim(),
@@ -289,105 +279,266 @@ export class ReviewService {
     };
   }
 
+  public async getAutoReviewConfig(
+    userId: string,
+    owner: string,
+    repo: string,
+  ): Promise<AutoReviewConfigView> {
+    await this.knowledge.getReadyKnowledgeBase(userId, owner, repo);
+    const config = await this.autoReviewConfigs.findByUserOwnerRepo(
+      userId,
+      owner,
+      repo,
+    );
+    return toAutoReviewConfigView(config);
+  }
+
+  public async updateAutoReviewConfig(
+    userId: string,
+    owner: string,
+    repo: string,
+    input: UpdateAutoReviewInput,
+  ): Promise<AutoReviewConfigView> {
+    const knowledgeBase = await this.knowledge.getReadyKnowledgeBase(
+      userId,
+      owner,
+      repo,
+    );
+    const targetBranch = input.targetBranch?.trim();
+    if (!targetBranch) {
+      throw AppError.badRequest("A target branch is required for auto-review.");
+    }
+
+    const existing = await this.autoReviewConfigs.findByUserOwnerRepo(
+      userId,
+      owner,
+      repo,
+    );
+    const accessToken = await this.github.getAccessToken(userId);
+
+    if (!input.enabled) {
+      if (existing?.webhookId) {
+        await this.github.deleteWebhook(
+          accessToken,
+          owner,
+          repo,
+          existing.webhookId,
+        );
+      }
+
+      const disabled = await this.autoReviewConfigs.upsert({
+        userId,
+        knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+        githubRepoId: knowledgeBase.githubRepoId,
+        owner,
+        repo,
+        enabled: false,
+        targetBranch,
+        webhookId: null,
+        webhookActive: false,
+      });
+
+      return toAutoReviewConfigView(disabled);
+    }
+
+    if (!env.GITHUB_WEBHOOK_SECRET) {
+      throw AppError.serviceUnavailable(
+        "GITHUB_WEBHOOK_SECRET is required to enable auto-review. Add it to server/.env.",
+      );
+    }
+
+    const webhookUrl = buildGithubWebhookUrl();
+    let webhookId = existing?.webhookId ?? undefined;
+    let webhookActive = false;
+
+    if (webhookId) {
+      const current = await this.github.getWebhook(
+        accessToken,
+        owner,
+        repo,
+        webhookId,
+      );
+      if (current) {
+        webhookActive = current.active;
+      } else {
+        webhookId = undefined;
+      }
+    }
+
+    if (!webhookId) {
+      try {
+        const created = await this.github.createWebhook(
+          accessToken,
+          owner,
+          repo,
+          {
+            url: webhookUrl,
+            secret: env.GITHUB_WEBHOOK_SECRET,
+          },
+        );
+        webhookId = created.id;
+        webhookActive = created.active;
+      } catch (error) {
+        if (error instanceof AppError && error.statusCode === 403) {
+          throw AppError.forbidden(
+            "Need admin access on this repository to manage webhooks for auto-review.",
+          );
+        }
+        throw error;
+      }
+    }
+
+    const saved = await this.autoReviewConfigs.upsert({
+      userId,
+      knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+      githubRepoId: knowledgeBase.githubRepoId,
+      owner,
+      repo,
+      enabled: true,
+      targetBranch,
+      webhookId,
+      webhookActive,
+    });
+
+    return toAutoReviewConfigView(saved);
+  }
+
+  public async handleGithubWebhook(input: {
+    rawBody: Buffer;
+    signatureHeader?: string;
+    eventName?: string;
+    deliveryId?: string;
+  }): Promise<{ accepted: boolean; enqueued: number }> {
+    if (!env.GITHUB_WEBHOOK_SECRET) {
+      throw AppError.serviceUnavailable(
+        "GITHUB_WEBHOOK_SECRET is not configured.",
+      );
+    }
+
+    const valid = this.github.verifyWebhookSignature(
+      input.rawBody,
+      input.signatureHeader,
+      env.GITHUB_WEBHOOK_SECRET,
+    );
+    if (!valid) {
+      throw AppError.unauthorized("Invalid GitHub webhook signature.");
+    }
+
+    const parsed = parsePullRequestWebhookPayload(
+      input.rawBody,
+      input.eventName,
+    );
+    if (!parsed) {
+      return { accepted: true, enqueued: 0 };
+    }
+
+    const configs = await this.autoReviewConfigs.findEnabledByGithubRepoId(
+      parsed.githubRepoId,
+    );
+    const matching = configs.filter(
+      (config) => config.targetBranch === parsed.baseRef,
+    );
+
+    const outcomes = await Promise.all(
+      matching.map(async (config) => {
+        try {
+          await this.knowledge.getReadyKnowledgeBase(
+            String(config.userId),
+            config.owner,
+            config.repo,
+          );
+        } catch {
+          logger.warn(
+            {
+              knowledgeBaseId: config.knowledgeBaseId,
+              owner: config.owner,
+              repo: config.repo,
+            },
+            "Skipping auto-review; knowledge base is not ready",
+          );
+          return false;
+        }
+
+        const job = await this.reviewJobs.enqueue({
+          userId: String(config.userId),
+          knowledgeBaseId: config.knowledgeBaseId,
+          owner: config.owner,
+          repo: config.repo,
+          prNumber: parsed.prNumber,
+          headSha: parsed.headSha,
+          ...(input.deliveryId ? { deliveryId: input.deliveryId } : {}),
+          action: parsed.action,
+        });
+
+        return Boolean(job);
+      }),
+    );
+
+    return {
+      accepted: true,
+      enqueued: outcomes.filter(Boolean).length,
+    };
+  }
+
+  public async processAutoReviewJob(job: {
+    jobId: string;
+    userId: string;
+    owner: string;
+    repo: string;
+    prNumber: number;
+  }): Promise<void> {
+    const analysis = await this.analyzePullRequest(
+      job.userId,
+      job.owner,
+      job.repo,
+      job.prNumber,
+    );
+
+    if (!analysis.comments.length) {
+      logger.info(
+        {
+          jobId: job.jobId,
+          owner: job.owner,
+          repo: job.repo,
+          prNumber: job.prNumber,
+        },
+        "Auto-review produced no comments",
+      );
+      return;
+    }
+
+    await this.publishReview(job.userId, job.owner, job.repo, job.prNumber, {
+      body: AUTO_REVIEW_SUMMARY,
+      comments: analysis.comments.map((comment) => ({
+        path: comment.path,
+        line: comment.line,
+        side: comment.side,
+        body: comment.body,
+      })),
+    });
+  }
+
   private async generateComments(input: {
     title: string;
     body: string | null;
     files: Array<{ filename: string; patch: string; context: string }>;
   }): Promise<LlmComment[]> {
     const openAI = this.getOpenAIClient();
-    const fileBlocks = input.files
-      .map(
-        (file) => `
-### File: ${file.filename}
-
-Knowledge base context:
-${file.context || "(no matching knowledge chunks)"}
-
-Diff:
-\`\`\`diff
-${file.patch}
-\`\`\`
-`,
-      )
-      .join("\n");
-
     const response = await openAI.responses.create({
-      model: "gpt-5",
+      model: REVIEW_LLM_MODEL,
       input: [
         {
           role: "system",
-          content: `You are a senior code reviewer for SourceSense.
-Review pull request diffs using ONLY the provided knowledge-base context and the diff itself.
-Return a JSON array of review comments. Each item must be:
-{"path":"relative/file/path","line":<number>,"side":"RIGHT","severity":"info"|"warning"|"important","body":"actionable comment"}
-
-Rules:
-- Prefer RIGHT-side line numbers from the new file in the diff.
-- Only comment on real issues: correctness, regressions vs prior patterns in the knowledge base, security, missing tests, API contract breaks.
-- Do not invent files that are not in the diff.
-- Keep bodies concise (1-3 sentences), specific, and professional.
-- Return at most ${MAX_COMMENTS} comments.
-- If nothing notable, return [].
-- Output JSON only, no markdown fences.`,
+          content: buildReviewSystemPrompt(),
         },
         {
           role: "user",
-          content: `PR title: ${input.title}
-PR body: ${input.body ?? "(none)"}
-
-${fileBlocks}`,
+          content: buildReviewUserPrompt(input),
         },
       ],
     });
 
-    const text = response.output_text?.trim() ?? "[]";
-    return parseJsonArray(text);
-  }
-
-  private normalizeComments(
-    rawComments: LlmComment[],
-    fileContexts: Array<{
-      filename: string;
-      validLines: Set<number>;
-    }>,
-  ): ReviewDraftComment[] {
-    const byPath = new Map(
-      fileContexts.map((file) => [file.filename, file.validLines]),
-    );
-    const comments: ReviewDraftComment[] = [];
-
-    for (const raw of rawComments) {
-      if (comments.length >= MAX_COMMENTS) {
-        break;
-      }
-
-      const path = typeof raw.path === "string" ? raw.path.trim() : "";
-      const body = typeof raw.body === "string" ? raw.body.trim() : "";
-      if (!path || !body || !byPath.has(path)) {
-        continue;
-      }
-
-      const preferredLine =
-        typeof raw.line === "number" && Number.isFinite(raw.line)
-          ? Math.trunc(raw.line)
-          : 1;
-      const validLines = byPath.get(path)!;
-      const line = pickNearestValidLine(preferredLine, validLines);
-      if (line === null) {
-        continue;
-      }
-
-      comments.push({
-        id: randomUUID(),
-        path,
-        line,
-        side: raw.side === "LEFT" ? "LEFT" : "RIGHT",
-        severity: normalizeSeverity(raw.severity),
-        body,
-      });
-    }
-
-    return comments;
+    return parseLlmCommentsJson(response.output_text?.trim() ?? "[]");
   }
 
   private getOpenAIClient() {
@@ -400,37 +551,4 @@ ${fileBlocks}`,
     this.openAIClient ??= new OpenAI({ apiKey: env.OPENAI_API_KEY });
     return this.openAIClient;
   }
-}
-
-function normalizeSeverity(value: unknown): ReviewCommentSeverity {
-  if (value === "warning" || value === "important") {
-    return value;
-  }
-  return "info";
-}
-
-function parseJsonArray(text: string): LlmComment[] {
-  const candidates = [text];
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced?.[1]) {
-    candidates.unshift(fenced[1].trim());
-  }
-
-  const arrayMatch = text.match(/\[[\s\S]*\]/);
-  if (arrayMatch?.[0]) {
-    candidates.unshift(arrayMatch[0]);
-  }
-
-  for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate) as unknown;
-      if (Array.isArray(parsed)) {
-        return parsed as LlmComment[];
-      }
-    } catch {
-      // try next candidate
-    }
-  }
-
-  throw AppError.badGateway("Failed to parse review comments from the model.");
 }

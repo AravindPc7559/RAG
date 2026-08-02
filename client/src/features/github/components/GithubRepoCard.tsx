@@ -1,4 +1,9 @@
 import type { GithubRepository } from "@/features/github/types/github.types";
+import { GithubRepoAutoReviewControls } from "@/features/github/components/GithubRepoAutoReviewControls";
+import {
+  formatGithubUpdatedAt,
+  getKnowledgeIndexingProgress,
+} from "@/features/github/utils/githubFormat";
 import {
   isKnowledgeIndexing,
   type KnowledgeRepoState,
@@ -12,41 +17,6 @@ interface GithubRepoCardProps {
   onImport: (repository: GithubRepository) => void;
   onOpenChat: (repository: GithubRepository) => void;
   onOpenPullRequests: (repository: GithubRepository) => void;
-}
-
-function formatUpdatedAt(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown";
-  }
-
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function getIndexingProgress(kb: NonNullable<KnowledgeRepoState["knowledgeBase"]>) {
-  const totalFiles = Math.max(0, kb.totalFiles || 0);
-  const processedFiles = Math.min(
-    Math.max(0, kb.processedFiles || 0),
-    totalFiles || Number.MAX_SAFE_INTEGER,
-  );
-  const pendingFiles = Math.max(totalFiles - processedFiles, 0);
-  const percent =
-    totalFiles > 0
-      ? Math.min(100, Math.round((processedFiles / totalFiles) * 100))
-      : 0;
-
-  return {
-    totalFiles,
-    processedFiles,
-    pendingFiles,
-    percent,
-    chunkCount: kb.chunkCount || 0,
-    hasTotals: totalFiles > 0,
-  };
 }
 
 export function GithubRepoCard({
@@ -68,7 +38,7 @@ export function GithubRepoCard({
   const isReady = kb?.status === "ready";
   const canSync = Boolean(kb) && !isBusy;
   const canImport = !kb && !isBusy;
-  const progress = kb ? getIndexingProgress(kb) : null;
+  const progress = kb ? getKnowledgeIndexingProgress(kb) : null;
 
   const statusLabel = (() => {
     if (indexing || actionStatus === "importing" || actionStatus === "syncing") {
@@ -130,7 +100,9 @@ export function GithubRepoCard({
           <div className="github-repo-box__progress">
             <span
               className={`github-repo-box__progress-bar${
-                progress.hasTotals ? "" : " github-repo-box__progress-bar--indeterminate"
+                progress.hasTotals
+                  ? ""
+                  : " github-repo-box__progress-bar--indeterminate"
               }`}
               style={
                 progress.hasTotals
@@ -156,7 +128,7 @@ export function GithubRepoCard({
       <div className="github-repo-box__footer">
         <span className="document-box__hint">
           {repository.defaultBranch} · Updated{" "}
-          {formatUpdatedAt(repository.updatedAt)}
+          {formatGithubUpdatedAt(repository.updatedAt)}
           {isReady ? ` · ${kb?.chunkCount ?? 0} chunks` : ""}
         </span>
         {knowledge?.error || kb?.errorMessage ? (
@@ -164,6 +136,16 @@ export function GithubRepoCard({
             {knowledge?.error || kb?.errorMessage}
           </p>
         ) : null}
+
+        {isReady ? (
+          <GithubRepoAutoReviewControls
+            owner={repository.owner}
+            repo={repository.name}
+            defaultBranch={repository.defaultBranch}
+            disabled={isBusy}
+          />
+        ) : null}
+
         <div className="github-repo-box__actions">
           <button
             type="button"

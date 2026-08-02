@@ -54,3 +54,9 @@ export interface PublishReviewResult {
   state: string;
   publishedCount: number;
 }
+
+export interface AutoReviewConfig {
+  enabled: boolean;
+  targetBranch: string;
+  webhookActive: boolean;
+}

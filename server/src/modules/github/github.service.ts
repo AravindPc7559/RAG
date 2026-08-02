@@ -6,6 +6,7 @@ import {
   fetchGithubAuthenticatedUser,
   fetchGithubRepositories,
   fetchGithubRepository,
+  fetchRepositoryBranches,
 } from "./github.api.js";
 import {
   assertGithubOAuthConfigured,
@@ -146,6 +147,15 @@ export class GithubService {
   ): Promise<GithubRepositorySummary> {
     const accessToken = await this.requireAccessToken(userId);
     return fetchGithubRepository(accessToken, owner, repo);
+  }
+
+  public async getRepositoryBranches(
+    userId: string,
+    owner: string,
+    repo: string,
+  ): Promise<Array<{ name: string; protected: boolean }>> {
+    const accessToken = await this.requireAccessToken(userId);
+    return fetchRepositoryBranches(accessToken, owner, repo);
   }
 
   public async refreshProfile(userId: string): Promise<GithubStatus> {

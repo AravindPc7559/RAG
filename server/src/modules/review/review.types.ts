@@ -1,5 +1,13 @@
 export type ReviewCommentSeverity = "info" | "warning" | "important";
 
+export interface LlmComment {
+  path?: string;
+  line?: number;
+  side?: string;
+  severity?: string;
+  body?: string;
+}
+
 export interface ReviewDraftComment {
   id: string;
   path: string;
@@ -75,12 +83,21 @@ export interface RetrievalPort {
   }): Promise<Array<{ text: string; sourcePath?: string; score: number }>>;
 }
 
+export interface ReadyKnowledgeBase {
+  knowledgeBaseId: string;
+  fullName: string;
+  githubRepoId: string;
+  defaultBranch: string;
+  owner: string;
+  repo: string;
+}
+
 export interface KnowledgeLookupPort {
   getReadyKnowledgeBase(
     userId: string,
     owner: string,
     repo: string,
-  ): Promise<{ knowledgeBaseId: string; fullName: string }>;
+  ): Promise<ReadyKnowledgeBase>;
 }
 
 export interface GithubPrPort {
@@ -133,4 +150,38 @@ export interface GithubPrPort {
       }>;
     },
   ): Promise<{ id: number; htmlUrl: string; state: string }>;
+  createWebhook(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    input: { url: string; secret: string },
+  ): Promise<{ id: number; active: boolean; url: string }>;
+  getWebhook(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    hookId: number,
+  ): Promise<{ id: number; active: boolean; url: string } | null>;
+  deleteWebhook(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    hookId: number,
+  ): Promise<void>;
+  verifyWebhookSignature(
+    rawBody: Buffer,
+    signatureHeader: string | undefined,
+    secret: string,
+  ): boolean;
+}
+
+export interface AutoReviewConfigView {
+  enabled: boolean;
+  targetBranch: string;
+  webhookActive: boolean;
+}
+
+export interface UpdateAutoReviewInput {
+  enabled: boolean;
+  targetBranch: string;
 }

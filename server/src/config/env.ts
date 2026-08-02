@@ -82,6 +82,11 @@ const envSchema = z.object({
     .trim()
     .url()
     .default("http://127.0.0.1:5173"),
+  APP_PUBLIC_URL: z
+    .string()
+    .trim()
+    .url()
+    .default("http://127.0.0.1:4000"),
   TOKEN_ENCRYPTION_KEY: optionalString,
   GITHUB_CLIENT_ID: optionalString,
   GITHUB_CLIENT_SECRET: optionalString,
@@ -92,6 +97,16 @@ const envSchema = z.object({
     .default("true")
     .transform((value) => value === "true"),
   KNOWLEDGE_WORKER_POLL_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(60_000)
+    .default(2_000),
+  REVIEW_WORKER_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  REVIEW_WORKER_POLL_MS: z.coerce
     .number()
     .int()
     .positive()

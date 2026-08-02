@@ -2,9 +2,13 @@ import { AppError } from "../../shared/errors/AppError.js";
 import type { ChatRepository } from "../chat/chat.repository.js";
 import {
   createPullRequestReview,
+  createRepositoryWebhook,
+  deleteRepositoryWebhook,
   fetchPullRequest,
   fetchPullRequestFiles,
   fetchPullRequests,
+  getRepositoryWebhook,
+  verifyGithubWebhookSignature,
 } from "../github/github.api.js";
 import type { GithubService } from "../github/github.service.js";
 import type { KnowledgeRepository } from "../knowledge/knowledge.repository.js";
@@ -57,6 +61,10 @@ export function createKnowledgeLookupAdapter(
       return {
         knowledgeBaseId: record.knowledgeBaseId,
         fullName: record.fullName,
+        githubRepoId: record.githubRepoId,
+        defaultBranch: record.defaultBranch,
+        owner: record.owner,
+        repo: record.repo,
       };
     },
   };
@@ -85,6 +93,18 @@ export function createGithubPrAdapter(
         event: "COMMENT",
         comments: input.comments,
       });
+    },
+    createWebhook(accessToken, owner, repo, input) {
+      return createRepositoryWebhook(accessToken, owner, repo, input);
+    },
+    getWebhook(accessToken, owner, repo, hookId) {
+      return getRepositoryWebhook(accessToken, owner, repo, hookId);
+    },
+    deleteWebhook(accessToken, owner, repo, hookId) {
+      return deleteRepositoryWebhook(accessToken, owner, repo, hookId);
+    },
+    verifyWebhookSignature(rawBody, signatureHeader, secret) {
+      return verifyGithubWebhookSignature(rawBody, signatureHeader, secret);
     },
   };
 }

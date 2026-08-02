@@ -10,6 +10,11 @@ export function createReviewRoutes(
 ) {
   const router = Router();
 
+  router.post(
+    "/webhooks/github",
+    asyncHandler(controller.handleGithubWebhook),
+  );
+
   router.use(asyncHandler(auth.authenticate));
 
   router.get(
@@ -27,6 +32,14 @@ export function createReviewRoutes(
   router.post(
     "/github/:owner/:repo/pulls/:number/publish",
     asyncHandler(controller.publishReview),
+  );
+  router.get(
+    "/github/:owner/:repo/auto-review",
+    asyncHandler(controller.getAutoReview),
+  );
+  router.put(
+    "/github/:owner/:repo/auto-review",
+    asyncHandler(controller.updateAutoReview),
   );
 
   return router;

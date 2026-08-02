@@ -21,6 +21,11 @@ interface GithubRepositoryResponse {
   repository: GithubRepository;
 }
 
+interface GithubBranchesResponse {
+  message: string;
+  branches: Array<{ name: string; protected: boolean }>;
+}
+
 function toQueryParams(query: GithubRepositoriesQuery = {}) {
   const params = new URLSearchParams();
 
@@ -80,6 +85,13 @@ export const githubService = {
       `/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
     );
     return response.data.repository;
+  },
+
+  async listBranches(owner: string, repo: string) {
+    const response = await baseService.get<GithubBranchesResponse>(
+      `/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches`,
+    );
+    return response.data.branches;
   },
 
   async disconnect() {

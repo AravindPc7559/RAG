@@ -1,18 +1,11 @@
 import type { RequestHandler } from "express";
 
 import { AppError } from "../../shared/errors/AppError.js";
+import { readStringParam } from "../../shared/utils/requestParams.js";
 import { GITHUB_OAUTH_NONCE_COOKIE } from "./github.oauth.js";
 import type { GithubService } from "./github.service.js";
 import type { ListGithubRepositoriesQuery } from "./github.types.js";
 
-function readStringParam(
-  value: string | string[] | undefined,
-): string | undefined {
-  if (typeof value === "string" && value.trim()) {
-    return value.trim();
-  }
-  return undefined;
-}
 
 function readQueryValue(value: unknown): string | undefined {
   if (typeof value === "string") {
@@ -112,6 +105,31 @@ export class GithubController {
     response.status(200).json({
       message: "GitHub repository fetched successfully",
       repository,
+    });
+  };
+
+  public listBranches: RequestHandler = async (request, response) => {
+    const userId = request.user?.id;
+    if (!userId) {
+      throw AppError.unauthorized();
+    }
+
+    const owner = readStringParam(request.params.owner);
+    const repo = readStringParam(request.params.repo);
+
+    if (!owner || !repo) {
+      throw AppError.badRequest("Repository owner and name are required.");
+    }
+
+    const branches = await this.githubService.getRepositoryBranches(
+      userId,
+      owner,
+      repo,
+    );
+
+    response.status(200).json({
+      message: "GitHub branches fetched successfully",
+      branches,
     });
   };
 

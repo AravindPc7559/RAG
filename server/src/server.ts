@@ -11,7 +11,7 @@ import { logger } from "./config/logger.js";
 async function bootstrap() {
   await connectDatabase();
 
-  const { app, knowledgeWorker } = createApp();
+  const { app, knowledgeWorker, reviewWorker } = createApp();
   const server = createServer(app);
   let isShuttingDown = false;
 
@@ -23,6 +23,14 @@ async function bootstrap() {
     );
   }
 
+  if (env.REVIEW_WORKER_ENABLED) {
+    reviewWorker.start();
+  } else {
+    logger.warn(
+      "Review worker is disabled in this process. Run `npm run worker` separately.",
+    );
+  }
+
   const shutdown = async (signal: NodeJS.Signals) => {
     if (isShuttingDown) {
       return;
@@ -31,6 +39,7 @@ async function bootstrap() {
     isShuttingDown = true;
     logger.info({ signal }, "Graceful shutdown started");
     knowledgeWorker.stop();
+    reviewWorker.stop();
 
     const forceShutdownTimer = setTimeout(() => {
       logger.fatal("Graceful shutdown timed out");
@@ -74,6 +83,7 @@ async function bootstrap() {
         environment: env.NODE_ENV,
         apiPrefix: env.API_PREFIX,
         knowledgeWorkerEnabled: env.KNOWLEDGE_WORKER_ENABLED,
+        reviewWorkerEnabled: env.REVIEW_WORKER_ENABLED,
       },
       "HTTP server started",
     );

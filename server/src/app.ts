@@ -10,15 +10,19 @@ import { pinoHttp } from "pino-http";
 import { env } from "./config/env.js";
 import { logger } from "./config/logger.js";
 import type { KnowledgeWorker } from "./modules/knowledge/knowledge.worker.js";
+import type { ReviewWorker } from "./modules/review/review.worker.js";
 import { createApiRouter, type ApiDependencies } from "./routes/index.js";
 import { errorHandler } from "./shared/middleware/errorHandler.js";
 import { notFoundHandler } from "./shared/middleware/notFoundHandler.js";
 import { AppError } from "./shared/errors/AppError.js";
 import { sendResponse } from "./shared/utils/sendResponse.js";
 
+const githubWebhookPath = `${env.API_PREFIX}/review/webhooks/github`;
+
 export function createApp(dependencies: ApiDependencies = {}): {
   app: express.Express;
   knowledgeWorker: KnowledgeWorker;
+  reviewWorker: ReviewWorker;
 } {
   const app = express();
   const api = createApiRouter(dependencies);
@@ -61,8 +65,13 @@ export function createApp(dependencies: ApiDependencies = {}): {
       standardHeaders: "draft-8",
       legacyHeaders: false,
       skip: (request) =>
-        request.path.startsWith(`${env.API_PREFIX}/health`),
+        request.path.startsWith(`${env.API_PREFIX}/health`) ||
+        request.path === githubWebhookPath,
     }),
+  );
+  app.use(
+    githubWebhookPath,
+    express.raw({ type: "application/json", limit: "1mb" }),
   );
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: false, limit: "1mb" }));
@@ -82,5 +91,6 @@ export function createApp(dependencies: ApiDependencies = {}): {
   return {
     app,
     knowledgeWorker: api.knowledgeWorker,
+    reviewWorker: api.reviewWorker,
   };
 }

@@ -1,3 +1,5 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+
 import { AppError } from "../../shared/errors/AppError.js";
 import type {
   GithubApiRepository,
@@ -61,8 +63,11 @@ async function githubFetch<T>(
     });
   }
 
+  const text = await response.text();
+  const data = (text ? JSON.parse(text) : null) as T;
+
   return {
-    data: (await response.json()) as T,
+    data,
     linkHeader: response.headers.get("link"),
   };
 }
@@ -460,12 +465,146 @@ export async function createPullRequestReview(
   };
 }
 
-/**
- * Extension points for future features (branches, issues, etc.).
- */
-export const githubApiExtensions = {
-  // branches: (token, owner, repo) => ...
-  // commits: (token, owner, repo) => ...
-  // issues: (token, owner, repo) => ...
-  // contributors: (token, owner, repo) => ...
-} as const;
+export async function fetchRepositoryBranches(
+  accessToken: string,
+  owner: string,
+  repo: string,
+): Promise<Array<{ name: string; protected: boolean }>> {
+  const branches: Array<{ name: string; protected: boolean }> = [];
+  let page = 1;
+
+  while (page <= 10) {
+    const { data, linkHeader } = await githubFetch<
+      Array<{ name: string; protected: boolean }>
+    >(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/branches?per_page=100&page=${page}`,
+      accessToken,
+    );
+
+    for (const branch of data) {
+      branches.push({
+        name: branch.name,
+        protected: Boolean(branch.protected),
+      });
+    }
+
+    if (!hasNextPage(linkHeader) || data.length === 0) {
+      break;
+    }
+    page += 1;
+  }
+
+  return branches;
+}
+
+export async function createRepositoryWebhook(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  input: {
+    url: string;
+    secret: string;
+    events?: string[];
+  },
+): Promise<{ id: number; active: boolean; url: string }> {
+  const { data } = await githubFetch<{
+    id: number;
+    active: boolean;
+    config?: { url?: string };
+  }>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/hooks`,
+    accessToken,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "web",
+        active: true,
+        events: input.events ?? ["pull_request"],
+        config: {
+          url: input.url,
+          content_type: "json",
+          secret: input.secret,
+          insecure_ssl: "0",
+        },
+      }),
+    },
+  );
+
+  return {
+    id: data.id,
+    active: Boolean(data.active),
+    url: data.config?.url ?? input.url,
+  };
+}
+
+export async function getRepositoryWebhook(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  hookId: number,
+): Promise<{ id: number; active: boolean; url: string } | null> {
+  try {
+    const { data } = await githubFetch<{
+      id: number;
+      active: boolean;
+      config?: { url?: string };
+    }>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/hooks/${hookId}`,
+      accessToken,
+    );
+
+    return {
+      id: data.id,
+      active: Boolean(data.active),
+      url: data.config?.url ?? "",
+    };
+  } catch (error) {
+    if (error instanceof AppError && error.statusCode === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function deleteRepositoryWebhook(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  hookId: number,
+): Promise<void> {
+  try {
+    await githubFetch<unknown>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/hooks/${hookId}`,
+      accessToken,
+      { method: "DELETE" },
+    );
+  } catch (error) {
+    if (error instanceof AppError && error.statusCode === 404) {
+      return;
+    }
+    throw error;
+  }
+}
+
+export function verifyGithubWebhookSignature(
+  rawBody: Buffer,
+  signatureHeader: string | undefined,
+  secret: string,
+): boolean {
+  if (!signatureHeader?.startsWith("sha256=") || !secret) {
+    return false;
+  }
+
+  const digest = createHmac("sha256", secret).update(rawBody).digest("hex");
+  const expected = Buffer.from(`sha256=${digest}`, "utf8");
+  const received = Buffer.from(signatureHeader, "utf8");
+
+  if (expected.length !== received.length) {
+    return false;
+  }
+
+  return timingSafeEqual(expected, received);
+}

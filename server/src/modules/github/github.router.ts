@@ -19,6 +19,10 @@ export function createGithubRoutes(
   router.get("/status", asyncHandler(controller.getStatus));
   router.get("/repos", asyncHandler(controller.listRepositories));
   router.get("/repos/:owner/:repo", asyncHandler(controller.getRepository));
+  router.get(
+    "/repos/:owner/:repo/branches",
+    asyncHandler(controller.listBranches),
+  );
   router.delete("/disconnect", asyncHandler(controller.disconnect));
   router.post("/refresh-profile", asyncHandler(controller.refreshProfile));
 

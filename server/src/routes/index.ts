@@ -11,6 +11,7 @@ import { createHealthRoutes } from "../modules/health/health.routes.js";
 import { createKnowledgeModule } from "../modules/knowledge/knowledge.modules.js";
 import type { KnowledgeWorker } from "../modules/knowledge/knowledge.worker.js";
 import { createReviewModule } from "../modules/review/review.modules.js";
+import type { ReviewWorker } from "../modules/review/review.worker.js";
 import { createUserModule } from "../modules/users/user.module.js";
 import type { UserRepository } from "../modules/users/user.repository.js";
 
@@ -24,6 +25,7 @@ export interface ApiDependencies {
 export function createApiRouter(dependencies: ApiDependencies = {}): {
   router: Router;
   knowledgeWorker: KnowledgeWorker;
+  reviewWorker: ReviewWorker;
 } {
   const router = Router();
   const users = createUserModule(dependencies.userRepository);
@@ -59,5 +61,6 @@ export function createApiRouter(dependencies: ApiDependencies = {}): {
   return {
     router,
     knowledgeWorker: knowledge.worker,
+    reviewWorker: review.worker,
   };
 }
