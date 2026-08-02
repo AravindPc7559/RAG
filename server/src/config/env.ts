@@ -19,15 +19,36 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
-  // Bind address only (e.g. 0.0.0.0). Never put a public URL here.
-  HOST: z
-    .string()
-    .trim()
-    .min(1)
-    .default("127.0.0.1")
-    .refine((value) => !value.includes("://"), {
-      message: 'HOST must be a bind address like "0.0.0.0", not a URL',
-    }),
+  // Bind address only (e.g. 0.0.0.0 / 127.0.0.1).
+  // If someone pastes a frontend URL into HOST (common on Render), coerce it.
+  HOST: z.preprocess((value) => {
+    if (typeof value !== "string") {
+      return value;
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const looksLikeUrl =
+      /^https?:/i.test(trimmed) ||
+      trimmed.includes("/") ||
+      trimmed.includes("vercel.app") ||
+      trimmed.includes("onrender.com");
+
+    if (looksLikeUrl) {
+      const fallback =
+        process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1";
+      console.warn(
+        `[env] HOST="${trimmed}" is not a bind address; using "${fallback}". ` +
+          "Set HOST=0.0.0.0 on Render and put the site URL in FRONTEND_URL / CORS_ORIGINS.",
+      );
+      return fallback;
+    }
+
+    return trimmed;
+  }, z.string().trim().min(1).default("127.0.0.1")),
   PORT: z.coerce.number().int().positive().default(4000),
   API_PREFIX: z.string().trim().startsWith("/").default("/api/v1"),
   CORS_ORIGINS: z

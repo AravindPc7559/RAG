@@ -75,6 +75,18 @@ async function bootstrap() {
     handleSignal("SIGTERM");
   });
 
+  server.on("error", (error) => {
+    logger.fatal(
+      {
+        error,
+        host: env.HOST,
+        port: env.PORT,
+      },
+      "HTTP server failed to bind. HOST must be 0.0.0.0 in Docker/Render, not a website URL.",
+    );
+    process.exit(1);
+  });
+
   server.listen(env.PORT, env.HOST, () => {
     logger.info(
       {
