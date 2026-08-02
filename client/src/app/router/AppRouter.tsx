@@ -48,6 +48,16 @@ const PullRequestReviewPage = lazy(() =>
     default: module.PullRequestReviewPage,
   })),
 );
+const ReviewHistoryPage = lazy(() =>
+  routeModules.review().then((module) => ({
+    default: module.ReviewHistoryPage,
+  })),
+);
+const ReviewRunDetailPage = lazy(() =>
+  routeModules.review().then((module) => ({
+    default: module.ReviewRunDetailPage,
+  })),
+);
 const NotFoundPage = lazy(() =>
   routeModules.notFound().then((module) => ({
     default: module.NotFoundPage,
@@ -87,6 +97,8 @@ export function AppRouter() {
             path={paths.githubPullReview}
             element={<PullRequestReviewPage />}
           />
+          <Route path={paths.reviews} element={<ReviewHistoryPage />} />
+          <Route path={paths.reviewRun} element={<ReviewRunDetailPage />} />
         </Route>
       </Route>
 

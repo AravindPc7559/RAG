@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 
 import {
   createPullRequestsPath,
+  createReviewRunPath,
   paths,
 } from "@/app/router/paths";
 import { reviewApi } from "@/features/review/api/reviewApi";
@@ -46,6 +47,7 @@ export function PullRequestReviewPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!owner || !repo || !Number.isInteger(pullNumber) || pullNumber < 1) {
@@ -94,14 +96,18 @@ export function PullRequestReviewPage() {
       setAnalyzedFiles(result.analyzedFiles);
       setSkippedFiles(result.skippedFiles);
       setHasAnalyzed(true);
+      setActiveRunId(result.runId ?? null);
 
       if (!result.comments.length) {
-        showToast("No review comments generated for this pull request.", "info");
+        showToast(
+          "No review comments generated. Run saved in Reviews history.",
+          "info",
+        );
       } else {
         showToast(
-          `Generated ${result.comments.length} draft comment${
+          `Generated and saved ${result.comments.length} comment${
             result.comments.length === 1 ? "" : "s"
-          }.`,
+          } to Reviews history.`,
           "success",
         );
       }
@@ -130,14 +136,20 @@ export function PullRequestReviewPage() {
         pullRequest.number,
         {
           body: summaryBody.trim() || undefined,
+          ...(activeRunId ? { runId: activeRunId } : {}),
           comments: selectedComments.map((comment) => ({
             path: comment.path,
             line: comment.line,
             side: comment.side,
+            severity: comment.severity,
             body: comment.body,
           })),
         },
       );
+
+      if (result.runId) {
+        setActiveRunId(result.runId);
+      }
 
       showToast(
         `Published ${result.publishedCount} comment${
@@ -253,15 +265,31 @@ export function PullRequestReviewPage() {
             <section className="review-panel">
               <div className="review-panel__header">
                 <h2>Changed files</h2>
-                <button
-                  type="button"
-                  className="button button--primary button--compact"
-                  disabled={isAnalyzing || isPublishing}
-                  onClick={() => void handleAnalyze()}
-                >
-                  {isAnalyzing ? "Generating…" : "Generate review"}
-                </button>
+                <div className="github-page__heading-actions">
+                  {activeRunId ? (
+                    <Link
+                      className="button button--secondary button--compact"
+                      to={createReviewRunPath(activeRunId)}
+                    >
+                      View saved run
+                    </Link>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="button button--primary button--compact"
+                    disabled={isAnalyzing || isPublishing}
+                    onClick={() => void handleAnalyze()}
+                  >
+                    {isAnalyzing ? "Generating…" : "Generate review"}
+                  </button>
+                </div>
               </div>
+              {isAnalyzing ? (
+                <p className="review-panel__hint">
+                  Analyzing changed files against the knowledge base. Large PRs
+                  can take up to a couple of minutes.
+                </p>
+              ) : null}
               <ul className="review-file-list">
                 {files.map((file) => (
                   <li key={file.filename}>
@@ -272,9 +300,12 @@ export function PullRequestReviewPage() {
                       </span>
                     </div>
                     {file.patchPreview ? (
-                      <pre className="review-file-list__patch">
-                        {file.patchPreview}
-                      </pre>
+                      <details className="review-file-list__details">
+                        <summary>Show patch preview</summary>
+                        <pre className="review-file-list__patch">
+                          {file.patchPreview}
+                        </pre>
+                      </details>
                     ) : (
                       <p className="review-file-list__empty">
                         {file.hasPatch
@@ -306,11 +337,21 @@ export function PullRequestReviewPage() {
                 </button>
               </div>
 
-              {!hasAnalyzed ? (
+              {!hasAnalyzed && !isAnalyzing ? (
                 <div className="document-library__empty">
                   <p>
                     Run Generate review to draft comments grounded in this
                     repository&apos;s knowledge base.
+                  </p>
+                </div>
+              ) : null}
+
+              {isAnalyzing ? (
+                <div className="document-library__empty">
+                  <p>Generating review comments…</p>
+                  <p className="review-panel__hint">
+                    Comments are saved to Reviews history when generation
+                    finishes.
                   </p>
                 </div>
               ) : null}

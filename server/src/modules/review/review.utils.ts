@@ -154,3 +154,38 @@ export function readPullRequestState(
   }
   return undefined;
 }
+
+export function countSeverities(
+  comments: Array<{ severity?: string }>,
+): { info: number; warning: number; important: number } {
+  const counts = { info: 0, warning: 0, important: 0 };
+  for (const comment of comments) {
+    counts[normalizeSeverity(comment.severity)] += 1;
+  }
+  return counts;
+}
+
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const limit = Math.max(1, Math.min(concurrency, items.length));
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const current = nextIndex;
+      nextIndex += 1;
+      results[current] = await mapper(items[current]!, current);
+    }
+  }
+
+  await Promise.all(Array.from({ length: limit }, () => worker()));
+  return results;
+}

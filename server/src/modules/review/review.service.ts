@@ -11,6 +11,7 @@ import {
   MAX_COMMENTS,
   MAX_CONTEXT_CHUNKS_PER_FILE,
   MAX_PATCH_CHARS,
+  MAX_RETRIEVAL_CONCURRENCY,
   PATCH_PREVIEW_CHARS,
   REVIEW_LLM_MODEL,
 } from "./review.constants.js";
@@ -20,28 +21,82 @@ import {
   buildReviewSystemPrompt,
   buildReviewUserPrompt,
 } from "./review.prompts.js";
+import type { ReviewRunDocument } from "./review.run.model.js";
+import type { ReviewRunRepository } from "./review.run.repository.js";
 import type {
+  AnalyzeReviewMeta,
   AnalyzeReviewResult,
   AutoReviewConfigView,
   GithubPrPort,
   KnowledgeLookupPort,
   LlmComment,
   PublishReviewCommentInput,
+  PublishReviewMeta,
   PublishReviewResult,
   RetrievalPort,
+  ReviewHistoryStats,
   ReviewPullRequestDetail,
+  ReviewRunDetail,
+  ReviewRunSource,
+  ReviewRunStatus,
+  ReviewRunSummary,
   UpdateAutoReviewInput,
 } from "./review.types.js";
 import {
   buildGithubWebhookUrl,
   buildRetrievalQuery,
+  countSeverities,
   formatContextChunks,
+  mapWithConcurrency,
   normalizeDraftComments,
+  normalizeSeverity,
   parseLlmCommentsJson,
   preferMatchingChunks,
   toAutoReviewConfigView,
 } from "./review.utils.js";
 import { parsePullRequestWebhookPayload } from "./review.webhook.js";
+
+function toReviewRunSummary(document: ReviewRunDocument): ReviewRunSummary {
+  return {
+    runId: document.runId,
+    knowledgeBaseId: document.knowledgeBaseId,
+    owner: document.owner,
+    repo: document.repo,
+    prNumber: document.prNumber,
+    headSha: document.headSha,
+    prTitle: document.prTitle,
+    source: document.source,
+    status: document.status,
+    ...(document.jobId ? { jobId: document.jobId } : {}),
+    ...(typeof document.githubReviewId === "number"
+      ? { githubReviewId: document.githubReviewId }
+      : {}),
+    ...(document.htmlUrl ? { htmlUrl: document.htmlUrl } : {}),
+    ...(document.githubState ? { githubState: document.githubState } : {}),
+    publishedCount: document.publishedCount,
+    commentCount: document.comments.length,
+    analyzedFiles: document.analyzedFiles,
+    skippedFiles: document.skippedFiles,
+    ...(document.summaryBody ? { summaryBody: document.summaryBody } : {}),
+    ...(document.errorMessage ? { errorMessage: document.errorMessage } : {}),
+    severityCounts: document.severityCounts,
+    createdAt: document.createdAt.toISOString(),
+    finishedAt: document.finishedAt.toISOString(),
+  };
+}
+
+function toReviewRunDetail(document: ReviewRunDocument): ReviewRunDetail {
+  return {
+    ...toReviewRunSummary(document),
+    comments: document.comments.map((comment) => ({
+      path: comment.path,
+      line: comment.line,
+      side: comment.side,
+      severity: comment.severity,
+      body: comment.body,
+    })),
+  };
+}
 
 export class ReviewService {
   private openAIClient: OpenAI | null = null;
@@ -52,6 +107,7 @@ export class ReviewService {
     private readonly retrieval: RetrievalPort,
     private readonly autoReviewConfigs: AutoReviewConfigRepository,
     private readonly reviewJobs: ReviewJobRepository,
+    private readonly reviewRuns: ReviewRunRepository,
   ) {}
 
   public async listPullRequests(
@@ -125,6 +181,7 @@ export class ReviewService {
     owner: string,
     repo: string,
     number: number,
+    meta: AnalyzeReviewMeta = {},
   ): Promise<AnalyzeReviewResult> {
     const knowledgeBase = await this.knowledge.getReadyKnowledgeBase(
       userId,
@@ -153,18 +210,47 @@ export class ReviewService {
     }
 
     const included = analyzable.slice(0, MAX_CHANGED_FILES);
+    const source = meta.source ?? "manual";
+    const persist = meta.persist !== false;
+
     if (!included.length) {
-      return {
+      const emptyResult: AnalyzeReviewResult = {
         pullRequestNumber: number,
         knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+        prTitle: pullRequest.title,
+        headSha: pullRequest.headSha,
         analyzedFiles: [],
         skippedFiles,
         comments: [],
       };
+
+      if (persist) {
+        const run = await this.reviewRuns.create({
+          userId,
+          knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+          owner,
+          repo,
+          prNumber: number,
+          headSha: pullRequest.headSha,
+          prTitle: pullRequest.title,
+          source,
+          status: "no_comments",
+          ...(meta.jobId ? { jobId: meta.jobId } : {}),
+          comments: [],
+          analyzedFiles: [],
+          skippedFiles,
+          severityCounts: { info: 0, warning: 0, important: 0 },
+        });
+        emptyResult.runId = run.runId;
+      }
+
+      return emptyResult;
     }
 
-    const fileContexts = await Promise.all(
-      included.map(async (file) => {
+    const fileContexts = await mapWithConcurrency(
+      included,
+      MAX_RETRIEVAL_CONCURRENCY,
+      async (file) => {
         const patch = truncatePatch(file.patch!, MAX_PATCH_CHARS);
         const validLines = extractRightSideLines(patch);
         const chunks = await this.retrieval.retrieveContext({
@@ -191,7 +277,7 @@ export class ReviewService {
             ),
           ),
         };
-      }),
+      },
     );
 
     const rawComments = await this.generateComments({
@@ -204,13 +290,47 @@ export class ReviewService {
       })),
     });
 
-    return {
+    const comments = normalizeDraftComments(rawComments, fileContexts);
+    const analyzedFiles = included.map((file) => file.filename);
+    const result: AnalyzeReviewResult = {
       pullRequestNumber: number,
       knowledgeBaseId: knowledgeBase.knowledgeBaseId,
-      analyzedFiles: included.map((file) => file.filename),
+      prTitle: pullRequest.title,
+      headSha: pullRequest.headSha,
+      analyzedFiles,
       skippedFiles,
-      comments: normalizeDraftComments(rawComments, fileContexts),
+      comments,
     };
+
+    if (persist) {
+      const persistedComments = comments.map((comment) => ({
+        path: comment.path,
+        line: comment.line,
+        side: comment.side,
+        severity: comment.severity,
+        body: comment.body,
+      }));
+
+      const run = await this.reviewRuns.create({
+        userId,
+        knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+        owner,
+        repo,
+        prNumber: number,
+        headSha: pullRequest.headSha,
+        prTitle: pullRequest.title,
+        source,
+        status: comments.length ? "generated" : "no_comments",
+        ...(meta.jobId ? { jobId: meta.jobId } : {}),
+        comments: persistedComments,
+        analyzedFiles,
+        skippedFiles,
+        severityCounts: countSeverities(persistedComments),
+      });
+      result.runId = run.runId;
+    }
+
+    return result;
   }
 
   public async publishReview(
@@ -222,8 +342,13 @@ export class ReviewService {
       body?: string;
       comments: PublishReviewCommentInput[];
     },
+    meta: PublishReviewMeta = {},
   ): Promise<PublishReviewResult> {
-    await this.knowledge.getReadyKnowledgeBase(userId, owner, repo);
+    const knowledgeBase = await this.knowledge.getReadyKnowledgeBase(
+      userId,
+      owner,
+      repo,
+    );
 
     if (!input.comments?.length) {
       throw AppError.badRequest("Select at least one comment to publish.");
@@ -254,6 +379,15 @@ export class ReviewService {
       number,
     );
 
+    const summaryBody = input.body?.trim() || DEFAULT_REVIEW_SUMMARY;
+    const persistedComments = input.comments.map((comment) => ({
+      path: comment.path.trim(),
+      line: comment.line,
+      side: (comment.side === "LEFT" ? "LEFT" : "RIGHT") as "LEFT" | "RIGHT",
+      severity: normalizeSeverity(comment.severity),
+      body: comment.body.trim(),
+    }));
+
     const review = await this.github.createReview(
       accessToken,
       owner,
@@ -261,21 +395,92 @@ export class ReviewService {
       number,
       {
         commitId: pullRequest.headSha,
-        body: input.body?.trim() || DEFAULT_REVIEW_SUMMARY,
-        comments: input.comments.map((comment) => ({
-          path: comment.path.trim(),
-          body: comment.body.trim(),
+        body: summaryBody,
+        comments: persistedComments.map((comment) => ({
+          path: comment.path,
+          body: comment.body,
           line: comment.line,
-          side: comment.side === "LEFT" ? "LEFT" : "RIGHT",
+          side: comment.side,
         })),
       },
     );
 
+    const htmlUrl = review.htmlUrl || pullRequest.htmlUrl;
+    const severityCounts = countSeverities(persistedComments);
+
+    let runId = meta.runId;
+    if (runId) {
+      const updated = await this.reviewRuns.markPublished(userId, runId, {
+        githubReviewId: review.id,
+        htmlUrl,
+        githubState: review.state,
+        publishedCount: persistedComments.length,
+        comments: persistedComments,
+        summaryBody,
+        severityCounts,
+      });
+      if (!updated) {
+        runId = undefined;
+      }
+    }
+
+    if (!runId) {
+      const existing = await this.reviewRuns.findLatestGeneratedForPr(
+        userId,
+        owner,
+        repo,
+        number,
+        pullRequest.headSha,
+      );
+      if (existing) {
+        const updated = await this.reviewRuns.markPublished(
+          userId,
+          existing.runId,
+          {
+            githubReviewId: review.id,
+            htmlUrl,
+            githubState: review.state,
+            publishedCount: persistedComments.length,
+            comments: persistedComments,
+            summaryBody,
+            severityCounts,
+          },
+        );
+        runId = updated?.runId;
+      }
+    }
+
+    if (!runId) {
+      const created = await this.reviewRuns.create({
+        userId,
+        knowledgeBaseId: knowledgeBase.knowledgeBaseId,
+        owner,
+        repo,
+        prNumber: number,
+        headSha: pullRequest.headSha,
+        prTitle: meta.prTitle?.trim() || pullRequest.title,
+        source: meta.source ?? "manual",
+        status: "published",
+        ...(meta.jobId ? { jobId: meta.jobId } : {}),
+        githubReviewId: review.id,
+        htmlUrl,
+        githubState: review.state,
+        publishedCount: persistedComments.length,
+        comments: persistedComments,
+        analyzedFiles: meta.analyzedFiles ?? [],
+        skippedFiles: meta.skippedFiles ?? [],
+        summaryBody,
+        severityCounts,
+      });
+      runId = created.runId;
+    }
+
     return {
       reviewId: review.id,
-      htmlUrl: review.htmlUrl || pullRequest.htmlUrl,
+      htmlUrl,
       state: review.state,
-      publishedCount: input.comments.length,
+      publishedCount: persistedComments.length,
+      runId,
     };
   }
 
@@ -486,12 +691,19 @@ export class ReviewService {
     owner: string;
     repo: string;
     prNumber: number;
+    knowledgeBaseId?: string;
+    headSha?: string;
   }): Promise<void> {
     const analysis = await this.analyzePullRequest(
       job.userId,
       job.owner,
       job.repo,
       job.prNumber,
+      {
+        source: "auto",
+        jobId: job.jobId,
+        persist: true,
+      },
     );
 
     if (!analysis.comments.length) {
@@ -501,21 +713,113 @@ export class ReviewService {
           owner: job.owner,
           repo: job.repo,
           prNumber: job.prNumber,
+          runId: analysis.runId,
         },
         "Auto-review produced no comments",
       );
       return;
     }
 
-    await this.publishReview(job.userId, job.owner, job.repo, job.prNumber, {
-      body: AUTO_REVIEW_SUMMARY,
-      comments: analysis.comments.map((comment) => ({
-        path: comment.path,
-        line: comment.line,
-        side: comment.side,
-        body: comment.body,
-      })),
-    });
+    await this.publishReview(
+      job.userId,
+      job.owner,
+      job.repo,
+      job.prNumber,
+      {
+        body: AUTO_REVIEW_SUMMARY,
+        comments: analysis.comments.map((comment) => ({
+          path: comment.path,
+          line: comment.line,
+          side: comment.side,
+          severity: comment.severity,
+          body: comment.body,
+        })),
+      },
+      {
+        source: "auto",
+        jobId: job.jobId,
+        runId: analysis.runId,
+        analyzedFiles: analysis.analyzedFiles,
+        skippedFiles: analysis.skippedFiles,
+        prTitle: analysis.prTitle,
+      },
+    );
+  }
+
+  public async recordFailedAutoReviewRun(input: {
+    userId: string;
+    knowledgeBaseId: string;
+    owner: string;
+    repo: string;
+    prNumber: number;
+    headSha: string;
+    jobId: string;
+    errorMessage: string;
+    prTitle?: string;
+  }): Promise<void> {
+    try {
+      await this.reviewRuns.create({
+        userId: input.userId,
+        knowledgeBaseId: input.knowledgeBaseId,
+        owner: input.owner,
+        repo: input.repo,
+        prNumber: input.prNumber,
+        headSha: input.headSha,
+        prTitle: input.prTitle || `Pull request #${input.prNumber}`,
+        source: "auto",
+        status: "failed",
+        jobId: input.jobId,
+        publishedCount: 0,
+        comments: [],
+        analyzedFiles: [],
+        skippedFiles: [],
+        errorMessage: input.errorMessage,
+        severityCounts: { info: 0, warning: 0, important: 0 },
+      });
+    } catch (error) {
+      logger.error(
+        { error, jobId: input.jobId },
+        "Failed to persist failed auto-review run",
+      );
+    }
+  }
+
+  public async listReviewHistory(
+    userId: string,
+    query: {
+      owner?: string;
+      repo?: string;
+      source?: ReviewRunSource;
+      status?: ReviewRunStatus;
+      page?: number;
+      perPage?: number;
+    },
+  ) {
+    const result = await this.reviewRuns.listForUser(userId, query);
+    return {
+      runs: result.runs.map(toReviewRunSummary),
+      page: result.page,
+      perPage: result.perPage,
+      hasNextPage: result.hasNextPage,
+      total: result.total,
+    };
+  }
+
+  public async getReviewHistoryRun(
+    userId: string,
+    runId: string,
+  ): Promise<ReviewRunDetail> {
+    const run = await this.reviewRuns.findByRunIdForUser(userId, runId);
+    if (!run) {
+      throw AppError.notFound("Review run");
+    }
+    return toReviewRunDetail(run);
+  }
+
+  public async getReviewHistoryStats(
+    userId: string,
+  ): Promise<ReviewHistoryStats> {
+    return this.reviewRuns.getStatsForUser(userId);
   }
 
   private async generateComments(input: {

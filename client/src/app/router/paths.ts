@@ -5,6 +5,8 @@ export const paths = {
   github: "/github",
   githubPulls: "/github/:owner/:repo/pulls",
   githubPullReview: "/github/:owner/:repo/pulls/:number",
+  reviews: "/reviews",
+  reviewRun: "/reviews/:runId",
   login: "/login",
   register: "/register",
 } as const;
@@ -23,4 +25,8 @@ export function createPullRequestPath(
   number: number,
 ) {
   return `${createPullRequestsPath(owner, repo)}/${number}`;
+}
+
+export function createReviewRunPath(runId: string) {
+  return `/reviews/${encodeURIComponent(runId)}`;
 }

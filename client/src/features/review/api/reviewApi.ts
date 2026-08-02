@@ -4,8 +4,13 @@ import type {
   AutoReviewConfig,
   PublishReviewResult,
   ReviewDraftComment,
+  ReviewHistoryStats,
   ReviewPullRequest,
   ReviewPullRequestFile,
+  ReviewRunDetail,
+  ReviewRunSource,
+  ReviewRunStatus,
+  ReviewRunSummary,
 } from "@/features/review/types/review.types";
 import { baseService } from "@/services/baseService";
 
@@ -37,6 +42,25 @@ interface PublishResponse extends PublishReviewResult {
 interface AutoReviewResponse {
   message: string;
   autoReview: AutoReviewConfig;
+}
+
+interface ListHistoryResponse {
+  message: string;
+  runs: ReviewRunSummary[];
+  page: number;
+  perPage: number;
+  hasNextPage: boolean;
+  total: number;
+}
+
+interface HistoryRunResponse {
+  message: string;
+  run: ReviewRunDetail;
+}
+
+interface HistoryStatsResponse {
+  message: string;
+  stats: ReviewHistoryStats;
 }
 
 function pullsBase(owner: string, repo: string) {
@@ -87,8 +111,12 @@ export const reviewApi = {
     number: number,
     input: {
       body?: string;
+      runId?: string;
       comments: Array<
-        Pick<ReviewDraftComment, "path" | "line" | "side" | "body">
+        Pick<
+          ReviewDraftComment,
+          "path" | "line" | "side" | "body" | "severity"
+        >
       >;
     },
   ) {
@@ -116,5 +144,45 @@ export const reviewApi = {
       input,
     );
     return response.data.autoReview;
+  },
+
+  async listHistory(
+    query: {
+      owner?: string;
+      repo?: string;
+      source?: ReviewRunSource;
+      status?: ReviewRunStatus;
+      page?: number;
+      perPage?: number;
+    } = {},
+  ) {
+    const response = await baseService.get<ListHistoryResponse>(
+      "/review/history",
+      {
+        params: {
+          ...(query.owner ? { owner: query.owner } : {}),
+          ...(query.repo ? { repo: query.repo } : {}),
+          ...(query.source ? { source: query.source } : {}),
+          ...(query.status ? { status: query.status } : {}),
+          ...(query.page ? { page: query.page } : {}),
+          ...(query.perPage ? { perPage: query.perPage } : {}),
+        },
+      },
+    );
+    return response.data;
+  },
+
+  async getHistoryRun(runId: string) {
+    const response = await baseService.get<HistoryRunResponse>(
+      `/review/history/${encodeURIComponent(runId)}`,
+    );
+    return response.data.run;
+  },
+
+  async getStats() {
+    const response = await baseService.get<HistoryStatsResponse>(
+      "/review/stats",
+    );
+    return response.data.stats;
   },
 };

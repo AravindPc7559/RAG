@@ -14,6 +14,7 @@ import {
 import { ReviewController } from "./review.controller.js";
 import { ReviewJobRepository } from "./review.job.repository.js";
 import { createReviewRoutes } from "./review.router.js";
+import { ReviewRunRepository } from "./review.run.repository.js";
 import { ReviewService } from "./review.service.js";
 import { ReviewWorker } from "./review.worker.js";
 
@@ -24,6 +25,7 @@ export function createReviewModule(
   knowledgeRepository: KnowledgeRepository = new KnowledgeRepository(),
   autoReviewConfigRepository: AutoReviewConfigRepository = new AutoReviewConfigRepository(),
   reviewJobRepository: ReviewJobRepository = new ReviewJobRepository(),
+  reviewRunRepository: ReviewRunRepository = new ReviewRunRepository(),
 ): {
   router: Router;
   controller: ReviewController;
@@ -37,6 +39,7 @@ export function createReviewModule(
     createRetrievalAdapter(chatRepository),
     autoReviewConfigRepository,
     reviewJobRepository,
+    reviewRunRepository,
   );
   const controller = new ReviewController(service);
   const router = createReviewRoutes(controller, auth);

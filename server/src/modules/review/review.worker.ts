@@ -69,12 +69,24 @@ export class ReviewWorker {
           owner: job.owner,
           repo: job.repo,
           prNumber: job.prNumber,
+          knowledgeBaseId: job.knowledgeBaseId,
+          headSha: job.headSha,
         });
         await this.jobRepository.markDone(job.jobId);
         logger.info({ jobId: job.jobId }, "Auto-review job finished");
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Auto-review job failed.";
+        await this.reviewService.recordFailedAutoReviewRun({
+          userId: String(job.userId),
+          knowledgeBaseId: job.knowledgeBaseId,
+          owner: job.owner,
+          repo: job.repo,
+          prNumber: job.prNumber,
+          headSha: job.headSha,
+          jobId: job.jobId,
+          errorMessage: message,
+        });
         await this.jobRepository.markFailed(job.jobId, message);
         logger.error({ error, jobId: job.jobId }, "Auto-review job failed");
       }

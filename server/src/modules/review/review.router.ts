@@ -17,6 +17,10 @@ export function createReviewRoutes(
 
   router.use(asyncHandler(auth.authenticate));
 
+  router.get("/history", asyncHandler(controller.listHistory));
+  router.get("/history/:runId", asyncHandler(controller.getHistoryRun));
+  router.get("/stats", asyncHandler(controller.getStats));
+
   router.get(
     "/github/:owner/:repo/pulls",
     asyncHandler(controller.listPullRequests),

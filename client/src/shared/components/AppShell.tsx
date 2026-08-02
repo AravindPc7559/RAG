@@ -33,6 +33,12 @@ const navigation = [
     end: false,
     prefetch: "github" as const,
   },
+  {
+    label: "Reviews",
+    to: paths.reviews,
+    end: false,
+    prefetch: "review" as const,
+  },
 ];
 
 export function AppShell() {

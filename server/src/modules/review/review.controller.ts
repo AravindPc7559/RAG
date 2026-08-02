@@ -7,8 +7,31 @@ import {
   readStringParam,
 } from "../../shared/utils/requestParams.js";
 import type { ReviewService } from "./review.service.js";
-import type { PublishReviewCommentInput } from "./review.types.js";
+import type {
+  PublishReviewCommentInput,
+  ReviewRunSource,
+  ReviewRunStatus,
+} from "./review.types.js";
 import { readPullRequestState } from "./review.utils.js";
+
+function readReviewSource(value: unknown): ReviewRunSource | undefined {
+  if (value === "manual" || value === "auto") {
+    return value;
+  }
+  return undefined;
+}
+
+function readReviewStatus(value: unknown): ReviewRunStatus | undefined {
+  if (
+    value === "generated" ||
+    value === "published" ||
+    value === "no_comments" ||
+    value === "failed"
+  ) {
+    return value;
+  }
+  return undefined;
+}
 
 function requireUserId(userId: string | undefined): string {
   if (!userId) {
@@ -96,6 +119,7 @@ export class ReviewController {
       owner,
       repo,
       number,
+      { source: "manual", persist: true },
     );
 
     response.status(200).json({
@@ -113,6 +137,8 @@ export class ReviewController {
     const comments = Array.isArray(request.body?.comments)
       ? (request.body.comments as PublishReviewCommentInput[])
       : [];
+    const runId =
+      typeof request.body?.runId === "string" ? request.body.runId : undefined;
 
     const result = await this.reviewService.publishReview(
       userId,
@@ -120,6 +146,7 @@ export class ReviewController {
       repo,
       number,
       { body, comments },
+      { source: "manual", ...(runId ? { runId } : {}) },
     );
 
     response.status(200).json({
@@ -188,6 +215,59 @@ export class ReviewController {
     response.status(202).json({
       message: "Webhook accepted",
       ...result,
+    });
+  };
+
+  public listHistory: RequestHandler = async (request, response) => {
+    const userId = requireUserId(request.user?.id);
+    const page = Number(request.query.page);
+    const perPage = Number(request.query.perPage);
+    const owner =
+      typeof request.query.owner === "string"
+        ? readStringParam(request.query.owner)
+        : undefined;
+    const repo =
+      typeof request.query.repo === "string"
+        ? readStringParam(request.query.repo)
+        : undefined;
+
+    const result = await this.reviewService.listReviewHistory(userId, {
+      ...(owner ? { owner } : {}),
+      ...(repo ? { repo } : {}),
+      source: readReviewSource(request.query.source),
+      status: readReviewStatus(request.query.status),
+      ...(Number.isInteger(page) && page > 0 ? { page } : {}),
+      ...(Number.isInteger(perPage) && perPage > 0 ? { perPage } : {}),
+    });
+
+    response.status(200).json({
+      message: "Review history fetched successfully",
+      ...result,
+    });
+  };
+
+  public getHistoryRun: RequestHandler = async (request, response) => {
+    const userId = requireUserId(request.user?.id);
+    const runId = readStringParam(request.params.runId);
+    if (!runId) {
+      throw AppError.badRequest("Review run id is required.");
+    }
+
+    const run = await this.reviewService.getReviewHistoryRun(userId, runId);
+
+    response.status(200).json({
+      message: "Review run fetched successfully",
+      run,
+    });
+  };
+
+  public getStats: RequestHandler = async (request, response) => {
+    const userId = requireUserId(request.user?.id);
+    const stats = await this.reviewService.getReviewHistoryStats(userId);
+
+    response.status(200).json({
+      message: "Review stats fetched successfully",
+      stats,
     });
   };
 }
