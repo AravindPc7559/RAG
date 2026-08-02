@@ -19,7 +19,15 @@ const envSchema = z.object({
   NODE_ENV: z
     .enum(["development", "test", "production"])
     .default("development"),
-  HOST: z.string().trim().min(1).default("127.0.0.1"),
+  // Bind address only (e.g. 0.0.0.0). Never put a public URL here.
+  HOST: z
+    .string()
+    .trim()
+    .min(1)
+    .default("127.0.0.1")
+    .refine((value) => !value.includes("://"), {
+      message: 'HOST must be a bind address like "0.0.0.0", not a URL',
+    }),
   PORT: z.coerce.number().int().positive().default(4000),
   API_PREFIX: z.string().trim().startsWith("/").default("/api/v1"),
   CORS_ORIGINS: z

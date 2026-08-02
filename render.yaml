@@ -1,0 +1,55 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+# Fix: Dockerfile Path must be a file (server/Dockerfile), not the server/ directory.
+
+services:
+  - type: web
+    name: sourcesense-api
+    runtime: docker
+    plan: free
+    rootDir: server
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/health/live
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Bind address only — never a URL like https://....vercel.app
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 4000
+      - key: TRUST_PROXY
+        value: "true"
+      - key: VECTOR_SEARCH_MODE
+        value: local
+      - key: KNOWLEDGE_WORKER_ENABLED
+        value: "true"
+      - key: REVIEW_WORKER_ENABLED
+        value: "true"
+      - key: JWT_COOKIE_SECURE
+        value: "true"
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: APP_PUBLIC_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GITHUB_CLIENT_ID
+        sync: false
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+      - key: GITHUB_CALLBACK_URL
+        sync: false
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
