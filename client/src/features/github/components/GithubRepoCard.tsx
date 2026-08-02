@@ -1,52 +1,10 @@
-import type { GithubRepository } from "@/features/github/types/github.types";
+import type { GithubRepoCardProps } from "@/features/github/types/github.components";
 import {
-  isKnowledgeIndexing,
-  type KnowledgeRepoState,
-} from "@/features/knowledge/types/knowledge.types";
-
-interface GithubRepoCardProps {
-  repository: GithubRepository;
-  knowledge?: KnowledgeRepoState;
-  onViewDetails: (repository: GithubRepository) => void;
-  onSync: (repository: GithubRepository) => void;
-  onImport: (repository: GithubRepository) => void;
-  onOpenChat: (repository: GithubRepository) => void;
-}
-
-function formatUpdatedAt(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Unknown";
-  }
-
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function getIndexingProgress(kb: NonNullable<KnowledgeRepoState["knowledgeBase"]>) {
-  const totalFiles = Math.max(0, kb.totalFiles || 0);
-  const processedFiles = Math.min(
-    Math.max(0, kb.processedFiles || 0),
-    totalFiles || Number.MAX_SAFE_INTEGER,
-  );
-  const pendingFiles = Math.max(totalFiles - processedFiles, 0);
-  const percent =
-    totalFiles > 0
-      ? Math.min(100, Math.round((processedFiles / totalFiles) * 100))
-      : 0;
-
-  return {
-    totalFiles,
-    processedFiles,
-    pendingFiles,
-    percent,
-    chunkCount: kb.chunkCount || 0,
-    hasTotals: totalFiles > 0,
-  };
-}
+  formatGithubDate,
+  getIndexingProgress,
+  getRepoCardStatusLabel,
+} from "@/features/github/utils/githubFormat";
+import { isKnowledgeIndexing } from "@/features/knowledge/types/knowledge.types";
 
 export function GithubRepoCard({
   repository,
@@ -55,6 +13,7 @@ export function GithubRepoCard({
   onSync,
   onImport,
   onOpenChat,
+  onOpenPullRequests,
 }: GithubRepoCardProps) {
   const kb = knowledge?.knowledgeBase;
   const actionStatus = knowledge?.actionStatus ?? "idle";
@@ -67,22 +26,11 @@ export function GithubRepoCard({
   const canSync = Boolean(kb) && !isBusy;
   const canImport = !kb && !isBusy;
   const progress = kb ? getIndexingProgress(kb) : null;
-
-  const statusLabel = (() => {
-    if (indexing || actionStatus === "importing" || actionStatus === "syncing") {
-      if (progress?.hasTotals) {
-        return `Indexing ${progress.percent}%`;
-      }
-      return actionStatus === "syncing" ? "Syncing…" : "Starting…";
-    }
-    if (isReady) {
-      return "Ready";
-    }
-    if (kb?.status === "failed") {
-      return "Failed";
-    }
-    return repository.visibility;
-  })();
+  const statusLabel = getRepoCardStatusLabel({
+    repository,
+    knowledge,
+    progress,
+  });
 
   return (
     <article
@@ -128,7 +76,9 @@ export function GithubRepoCard({
           <div className="github-repo-box__progress">
             <span
               className={`github-repo-box__progress-bar${
-                progress.hasTotals ? "" : " github-repo-box__progress-bar--indeterminate"
+                progress.hasTotals
+                  ? ""
+                  : " github-repo-box__progress-bar--indeterminate"
               }`}
               style={
                 progress.hasTotals
@@ -151,63 +101,67 @@ export function GithubRepoCard({
         </div>
       ) : null}
 
-      <span className="document-box__hint">
-        {repository.defaultBranch} · Updated{" "}
-        {formatUpdatedAt(repository.updatedAt)}
-        {isReady ? ` · ${kb?.chunkCount ?? 0} chunks` : ""}
-      </span>
-      {knowledge?.error || kb?.errorMessage ? (
-        <p className="github-repo-box__error">
-          {knowledge?.error || kb?.errorMessage}
-        </p>
-      ) : null}
-      <div className="github-repo-box__actions">
-        <button
-          type="button"
-          className="button button--secondary button--compact"
-          onClick={() => onViewDetails(repository)}
-        >
-          View Details
-        </button>
-        <button
-          type="button"
-          className="button button--secondary button--compact"
-          disabled={!canSync}
-          onClick={() => onSync(repository)}
-        >
-          {actionStatus === "syncing" || indexing ? "Working…" : "Sync"}
-        </button>
-        {!kb || actionStatus === "importing" ? (
+      <div className="github-repo-box__footer">
+        <span className="document-box__hint">
+          {repository.defaultBranch} · Updated{" "}
+          {formatGithubDate(repository.updatedAt)}
+          {isReady ? ` · ${kb?.chunkCount ?? 0} chunks` : ""}
+        </span>
+        {knowledge?.error || kb?.errorMessage ? (
+          <p className="github-repo-box__error">
+            {knowledge?.error || kb?.errorMessage}
+          </p>
+        ) : null}
+        <div className="github-repo-box__actions">
           <button
             type="button"
             className="button button--secondary button--compact"
-            disabled={!canImport}
-            onClick={() => onImport(repository)}
+            onClick={() => onViewDetails(repository)}
           >
-            {actionStatus === "importing" ? "Starting…" : "Import"}
+            View Details
           </button>
-        ) : (
           <button
             type="button"
-            className="button button--primary button--compact"
-            disabled={!isReady}
-            onClick={() => onOpenChat(repository)}
+            className="button button--secondary button--compact"
+            disabled={!canSync}
+            onClick={() => onSync(repository)}
           >
-            {indexing
-              ? progress?.hasTotals
-                ? `${progress.percent}%`
-                : "Indexing…"
-              : "Open chat"}
+            {actionStatus === "syncing" || indexing ? "Working…" : "Sync"}
           </button>
-        )}
-        <a
-          className="button button--ghost-dark button--compact"
-          href={repository.htmlUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Open on GitHub
-        </a>
+          {!kb || actionStatus === "importing" ? (
+            <button
+              type="button"
+              className="button button--secondary button--compact"
+              disabled={!canImport}
+              onClick={() => onImport(repository)}
+            >
+              {actionStatus === "importing" ? "Starting…" : "Import"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="button button--primary button--compact"
+              disabled={!isReady}
+              onClick={() => onOpenChat(repository)}
+            >
+              {indexing
+                ? progress?.hasTotals
+                  ? `${progress.percent}%`
+                  : "Indexing…"
+                : "Open chat"}
+            </button>
+          )}
+          {onOpenPullRequests ? (
+            <button
+              type="button"
+              className="button button--secondary button--compact"
+              disabled={!isReady}
+              onClick={() => onOpenPullRequests(repository)}
+            >
+              Pull requests
+            </button>
+          ) : null}
+        </div>
       </div>
     </article>
   );

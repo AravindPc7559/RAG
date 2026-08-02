@@ -1,7 +1,4 @@
-interface GithubEmptyStateProps {
-  onConnect: () => void;
-  isConnecting?: boolean;
-}
+import type { GithubEmptyStateProps } from "@/features/github/types/github.components";
 
 export function GithubEmptyState({
   onConnect,

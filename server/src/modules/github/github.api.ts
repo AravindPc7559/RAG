@@ -1,13 +1,28 @@
 import { AppError } from "../../shared/errors/AppError.js";
+import {
+  GITHUB_API_BASE,
+  GITHUB_API_VERSION,
+  GITHUB_USER_AGENT,
+} from "./github.constants.js";
 import type {
+  CreatePullRequestReviewInput,
+  GithubApiPullRequest,
+  GithubApiPullRequestFile,
   GithubApiRepository,
   GithubApiUser,
-  GithubRepositorySummary,
+  GithubContentFileResponse,
+  GithubPullRequestFile,
+  GithubTreeBlob,
+  GithubTreeResponse,
   ListGithubRepositoriesQuery,
+  ListPullRequestsQuery,
 } from "./github.types.js";
-
-const GITHUB_API_BASE = "https://api.github.com";
-const GITHUB_API_VERSION = "2022-11-28";
+import {
+  hasNextPage,
+  mapPullRequest,
+  mapPullRequestFile,
+  mapRepository,
+} from "./github.utils.js";
 
 async function githubFetch<T>(
   path: string,
@@ -20,7 +35,7 @@ async function githubFetch<T>(
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${accessToken}`,
       "X-GitHub-Api-Version": GITHUB_API_VERSION,
-      "User-Agent": "sourcesense",
+      "User-Agent": GITHUB_USER_AGENT,
       ...(init?.headers ?? {}),
     },
   });
@@ -65,30 +80,6 @@ async function githubFetch<T>(
     data: (await response.json()) as T,
     linkHeader: response.headers.get("link"),
   };
-}
-
-function mapRepository(repo: GithubApiRepository): GithubRepositorySummary {
-  const isPrivate = Boolean(repo.private);
-  return {
-    id: repo.id,
-    name: repo.name,
-    fullName: repo.full_name,
-    owner: repo.owner.login,
-    description: repo.description,
-    language: repo.language,
-    visibility: isPrivate ? "Private" : "Public",
-    private: isPrivate,
-    stargazersCount: repo.stargazers_count,
-    forksCount: repo.forks_count,
-    updatedAt: repo.updated_at,
-    defaultBranch: repo.default_branch,
-    htmlUrl: repo.html_url,
-    topics: repo.topics ?? [],
-  };
-}
-
-function hasNextPage(linkHeader: string | null): boolean {
-  return Boolean(linkHeader?.includes('rel="next"'));
 }
 
 export async function fetchGithubAuthenticatedUser(accessToken: string) {
@@ -157,36 +148,6 @@ export async function fetchGithubRepository(
   return mapRepository(data);
 }
 
-interface GithubTreeItem {
-  path: string;
-  type: string;
-  sha: string;
-  size?: number;
-  url?: string;
-}
-
-interface GithubTreeResponse {
-  sha: string;
-  truncated: boolean;
-  tree: GithubTreeItem[];
-}
-
-interface GithubContentFileResponse {
-  type: string;
-  encoding?: string;
-  size: number;
-  name: string;
-  path: string;
-  content?: string;
-  sha: string;
-}
-
-export interface GithubTreeBlob {
-  path: string;
-  sha: string;
-  size: number;
-}
-
 export async function fetchRepositoryTree(
   accessToken: string,
   owner: string,
@@ -242,14 +203,100 @@ export async function fetchFileContent(
   }
 }
 
-/**
- * Extension points for future features (branches, PRs, issues, etc.).
- * Keep GitHub REST calls centralized here as those features land.
- */
-export const githubApiExtensions = {
-  // branches: (token, owner, repo) => ...
-  // commits: (token, owner, repo) => ...
-  // pullRequests: (token, owner, repo) => ...
-  // issues: (token, owner, repo) => ...
-  // contributors: (token, owner, repo) => ...
-} as const;
+export async function fetchPullRequests(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  query: ListPullRequestsQuery = {},
+) {
+  const page = query.page && query.page > 0 ? query.page : 1;
+  const perPage =
+    query.perPage && query.perPage > 0 ? Math.min(query.perPage, 50) : 20;
+  const state = query.state ?? "open";
+  const params = new URLSearchParams({
+    state,
+    page: String(page),
+    per_page: String(perPage),
+    sort: "updated",
+    direction: "desc",
+  });
+
+  const { data, linkHeader } = await githubFetch<GithubApiPullRequest[]>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls?${params.toString()}`,
+    accessToken,
+  );
+
+  return {
+    pullRequests: data.map(mapPullRequest),
+    page,
+    perPage,
+    hasNextPage: hasNextPage(linkHeader),
+  };
+}
+
+export async function fetchPullRequest(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  number: number,
+) {
+  const { data } = await githubFetch<GithubApiPullRequest>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`,
+    accessToken,
+  );
+  return mapPullRequest(data);
+}
+
+export async function fetchPullRequestFiles(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  number: number,
+): Promise<GithubPullRequestFile[]> {
+  const { data } = await githubFetch<GithubApiPullRequestFile[]>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}/files?per_page=100`,
+    accessToken,
+  );
+
+  return data.map(mapPullRequestFile);
+}
+
+export async function createPullRequestReview(
+  accessToken: string,
+  owner: string,
+  repo: string,
+  number: number,
+  input: CreatePullRequestReviewInput,
+) {
+  const { data } = await githubFetch<{
+    id: number;
+    html_url: string;
+    state: string;
+  }>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}/reviews`,
+    accessToken,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        commit_id: input.commitId,
+        body: input.body ?? "",
+        event: input.event ?? "COMMENT",
+        comments: input.comments.map((comment) => ({
+          path: comment.path,
+          body: comment.body,
+          line: comment.line,
+          side: comment.side ?? "RIGHT",
+        })),
+      }),
+    },
+  );
+
+  return {
+    id: data.id,
+    htmlUrl: data.html_url,
+    state: data.state,
+  };
+}

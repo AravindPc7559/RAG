@@ -10,6 +10,7 @@ import type { GithubRepository } from "../modules/github/github.repository.js";
 import { createHealthRoutes } from "../modules/health/health.routes.js";
 import { createKnowledgeModule } from "../modules/knowledge/knowledge.modules.js";
 import type { KnowledgeWorker } from "../modules/knowledge/knowledge.worker.js";
+import { createReviewModule } from "../modules/review/review.modules.js";
 import { createUserModule } from "../modules/users/user.module.js";
 import type { UserRepository } from "../modules/users/user.repository.js";
 
@@ -41,6 +42,11 @@ export function createApiRouter(dependencies: ApiDependencies = {}): {
     github.service,
     dependencies.documentRepository,
   );
+  const review = createReviewModule(
+    auth.middleware,
+    github.service,
+    chat.repository,
+  );
 
   router.use("/health", createHealthRoutes());
   router.use("/auth", auth.router);
@@ -48,6 +54,7 @@ export function createApiRouter(dependencies: ApiDependencies = {}): {
   router.use("/chat", chat.router);
   router.use("/github", github.router);
   router.use("/knowledge", knowledge.router);
+  router.use("/review", review.router);
 
   return {
     router,

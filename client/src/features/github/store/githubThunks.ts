@@ -9,16 +9,10 @@ import type {
 } from "@/features/github/types/github.types";
 import type { KnowledgeBase } from "@/features/knowledge/types/knowledge.types";
 import { knowledgeRepoKey } from "@/features/knowledge/types/knowledge.types";
-import {
-  toApiErrorPayload,
-  type ApiErrorPayload,
-} from "@/services/apiErrors";
+import type { GithubThunkConfig } from "@/features/github/types/github.types";
+import { toApiErrorPayload } from "@/services/apiErrors";
 import { githubService } from "@/services/github";
 import { knowledgeService } from "@/services/knowledge";
-
-interface GithubThunkConfig {
-  rejectValue: ApiErrorPayload;
-}
 
 export const fetchGithubStatus = createAsyncThunk<
   GithubStatus,

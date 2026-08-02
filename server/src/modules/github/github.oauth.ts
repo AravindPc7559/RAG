@@ -11,6 +11,16 @@ const OAUTH_STATE_EXPIRES_IN = "10m";
 export const GITHUB_OAUTH_NONCE_COOKIE = "github_oauth_nonce";
 export const GITHUB_OAUTH_SCOPES = ["read:user", "user:email", "repo"].join(" ");
 
+export function oauthNonceCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 10 * 60 * 1000,
+  };
+}
+
 interface OAuthStatePayload {
   sub: string;
   nonce: string;

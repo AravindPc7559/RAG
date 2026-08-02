@@ -14,6 +14,7 @@ import {
   createOAuthState,
   exchangeCodeForToken,
   GITHUB_OAUTH_NONCE_COOKIE,
+  oauthNonceCookieOptions,
   verifyOAuthState,
 } from "./github.oauth.js";
 import type { GithubRepository } from "./github.repository.js";
@@ -23,16 +24,6 @@ import type {
   GithubStatus,
   ListGithubRepositoriesQuery,
 } from "./github.types.js";
-
-function oauthNonceCookieOptions() {
-  return {
-    httpOnly: true,
-    secure: env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    maxAge: 10 * 60 * 1000,
-  };
-}
 
 export class GithubService {
   constructor(private readonly githubRepository: GithubRepository) {}

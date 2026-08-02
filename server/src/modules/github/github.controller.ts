@@ -1,34 +1,13 @@
 import type { RequestHandler } from "express";
 
 import { AppError } from "../../shared/errors/AppError.js";
+import {
+  readQueryValue,
+  readStringParam,
+} from "../../shared/utils/requestParams.js";
 import { GITHUB_OAUTH_NONCE_COOKIE } from "./github.oauth.js";
 import type { GithubService } from "./github.service.js";
-import type { ListGithubRepositoriesQuery } from "./github.types.js";
-
-function readStringParam(
-  value: string | string[] | undefined,
-): string | undefined {
-  if (typeof value === "string" && value.trim()) {
-    return value.trim();
-  }
-  return undefined;
-}
-
-function readQueryValue(value: unknown): string | undefined {
-  if (typeof value === "string") {
-    return readStringParam(value);
-  }
-
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return String(value);
-  }
-
-  if (Array.isArray(value) && typeof value[0] === "string") {
-    return readStringParam(value[0]);
-  }
-
-  return undefined;
-}
+import { parseListRepositoriesQuery } from "./github.utils.js";
 
 export class GithubController {
   constructor(private readonly githubService: GithubService) {}
@@ -81,7 +60,10 @@ export class GithubController {
       throw AppError.unauthorized();
     }
 
-    const query = this.parseListQuery(request.query);
+    const query = parseListRepositoriesQuery(
+      request.query as Record<string, unknown>,
+      readQueryValue,
+    );
     const result = await this.githubService.getRepositories(userId, query);
 
     response.status(200).json({
@@ -142,39 +124,4 @@ export class GithubController {
       status,
     });
   };
-
-  private parseListQuery(
-    query: Record<string, unknown>,
-  ): ListGithubRepositoriesQuery {
-    const page = Number.parseInt(readQueryValue(query.page) ?? "", 10);
-    const perPage = Number.parseInt(readQueryValue(query.perPage) ?? "", 10);
-    const sort = readQueryValue(query.sort);
-    const direction = readQueryValue(query.direction);
-    const visibility = readQueryValue(query.visibility);
-    const search = readQueryValue(query.search);
-
-    const allowedSort = ["created", "updated", "pushed", "full_name"] as const;
-    const allowedDirection = ["asc", "desc"] as const;
-    const allowedVisibility = ["all", "public", "private"] as const;
-
-    return {
-      ...(Number.isFinite(page) && page > 0 ? { page } : {}),
-      ...(Number.isFinite(perPage) && perPage > 0 ? { perPage } : {}),
-      ...(sort &&
-      allowedSort.includes(sort as (typeof allowedSort)[number])
-        ? { sort: sort as (typeof allowedSort)[number] }
-        : {}),
-      ...(direction &&
-      allowedDirection.includes(direction as (typeof allowedDirection)[number])
-        ? { direction: direction as (typeof allowedDirection)[number] }
-        : {}),
-      ...(visibility &&
-      allowedVisibility.includes(
-        visibility as (typeof allowedVisibility)[number],
-      )
-        ? { visibility: visibility as (typeof allowedVisibility)[number] }
-        : {}),
-      ...(search ? { search } : {}),
-    };
-  }
 }

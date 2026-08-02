@@ -1,27 +1,5 @@
-import type { GithubStatus } from "@/features/github/types/github.types";
-
-interface GithubConnectionHeaderProps {
-  connection: GithubStatus;
-  isDisconnecting: boolean;
-  onDisconnect: () => void;
-}
-
-function formatConnectedAt(value?: string) {
-  if (!value) {
-    return null;
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
+import type { GithubConnectionHeaderProps } from "@/features/github/types/github.components";
+import { formatConnectedAt } from "@/features/github/utils/githubFormat";
 
 export function GithubConnectionHeader({
   connection,

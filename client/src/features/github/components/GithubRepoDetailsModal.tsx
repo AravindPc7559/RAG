@@ -1,10 +1,4 @@
-import type { GithubRepository } from "@/features/github/types/github.types";
-
-interface GithubRepoDetailsModalProps {
-  repository: GithubRepository | null;
-  isLoading: boolean;
-  onClose: () => void;
-}
+import type { GithubRepoDetailsModalProps } from "@/features/github/types/github.components";
 
 export function GithubRepoDetailsModal({
   repository,

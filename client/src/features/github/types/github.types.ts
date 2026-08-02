@@ -2,6 +2,10 @@ import type { KnowledgeRepoState } from "@/features/knowledge/types/knowledge.ty
 import type { ApiErrorPayload } from "@/services/apiErrors";
 import type { AsyncStatus } from "@/shared/types/asyncState";
 
+export interface GithubThunkConfig {
+  rejectValue: ApiErrorPayload;
+}
+
 export interface GithubStatus {
   connected: boolean;
   githubId?: string;
